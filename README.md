@@ -1,16 +1,63 @@
 # Murmur
 
-极简的 AI 聊天桌面应用，支持 macOS 和 Windows。用 [MyGo](https://mygo.egoist.dev/docs) 的原生 UI 写成：纯 Go、无 cgo、不依赖 WebView，启动快、体积小。
+**用你自己的 API Key，在桌面上和各家大模型聊天。** 极简、原生、数据只留在本机。
+
+DeepSeek、通义千问、Kimi、智谱 GLM、豆包、硅基流动、Claude、GPT、Gemini、OpenRouter、本地 Ollama 开箱即选；其他兼容 OpenAI 或 Anthropic 接口的服务也能接。
+
+**[下载最新版](https://github.com/Qsnh/Murmur/releases/latest)** · macOS 12+ · Windows 10 / 11 · 安装包不到 10 MB
 
 ![Murmur](docs/screenshot.png)
 
-## 功能
+## 适合你吗
 
-- **自定义模型**：支持 OpenAI 兼容协议和 Anthropic 协议，想加多少模型都行。内置 OpenAI、Claude、DeepSeek、通义千问、智谱 GLM、Kimi、豆包、硅基流动、Gemini、OpenRouter、Ollama 预设，选一个填上 API Key 就能用
-- **深度思考**：输入框旁边一键开关。思考过程实时流式显示，答案开始输出后自动折叠，并显示思考用时
-- **流式 Markdown**：代码高亮（带复制按钮）、表格、引用、任务列表、数学公式
-- **对话管理**：按今天 / 昨天 / 7 天内 / 更早分组，右键删除；复制回复、重新生成、随时停止
-- **其他**：系统提示词、网络代理（http / https / socks5）、深色模式跟随系统、macOS 毛玻璃侧边栏、Windows 11 Mica
+| | |
+|---|---|
+| 系统 | macOS 12 及以上（Intel / Apple 芯片），Windows 10 / 11（x64 / ARM） |
+| 模型 | 需要你自己的 API Key，或本机跑的 Ollama 等模型。Murmur 不提供模型 |
+| 账号 | 不用注册、不用登录 |
+| 隐私 | 对话和设置只存在本机；请求直接发到你填的接口地址，不经过中转，没有统计上报 |
+| 界面语言 | 中文 |
+
+**能做的**
+
+- 添加任意多个模型，在输入框下方随时切换
+- 深度思考一键开关，实时看到模型的思考过程和用时
+- 回复实时渲染 Markdown：代码高亮（可一键复制）、表格、数学公式
+- 对话自动保存，按今天 / 昨天 / 7 天内 / 更早分组；复制回复、重新生成、随时停止
+- 系统提示词，网络代理（http / https / socks5）
+- 原生界面，启动快；深色模式跟随系统
+
+**暂不支持**
+
+- 发送图片、文件（目前只能文字对话）
+- 联网搜索、插件、MCP 等工具调用
+- 编辑已发送的消息
+- 搜索、重命名、导出对话，多设备同步
+- Linux、手机
+
+## 下载安装
+
+到 [Releases](https://github.com/Qsnh/Murmur/releases/latest) 下载对应的文件：
+
+| 你的电脑 | 下载这个 |
+|---|---|
+| Mac（Intel 和 Apple 芯片通用） | `Murmur-<版本>-macos-universal.dmg` |
+| 大多数 Windows 电脑 | `Murmur-Setup-<版本>-windows-amd64.exe` |
+| ARM 处理器的 Windows（如骁龙笔记本） | `Murmur-Setup-<版本>-windows-arm64.exe` |
+| Windows 免安装版 | `Murmur-<版本>-windows-{amd64,arm64}-portable.zip`，解压后运行 `Murmur.exe` |
+
+安装包还没有开发者签名，第一次打开时系统会拦一下：
+
+- **macOS**：提示无法打开时，到「系统设置 → 隐私与安全性」，在页面下方点「仍要打开」。如果提示「已损坏」，在终端执行 `xattr -dr com.apple.quarantine /Applications/Murmur.app` 后再打开
+- **Windows**：SmartScreen 弹窗里点「更多信息」→「仍要运行」
+
+## 三步开始
+
+1. 打开 Murmur，点「添加模型」，选一个服务商，比如 DeepSeek
+2. 填入 API Key，点「测试连接」，看到「连接成功」就可以了（Ollama 等本地模型不用填 Key）
+3. 回到对话框输入问题，Enter 发送
+
+服务商不在列表里？选「自定义」，填上接口地址和模型 ID。
 
 ## 快捷键
 
@@ -21,88 +68,35 @@
 | 新对话 | ⌘N | Ctrl+N |
 | 设置 | ⌘, | Ctrl+, |
 
-## 深度思考是怎么实现的
+## 常见问题
 
-各家打开思考的方式不一样，Murmur 会按接口地址自动识别，也可以在模型设置的「思考参数」里手动指定：
+**数据和 API Key 存在哪？**
 
-| 思考参数 | 适用于 | 开 | 关 |
-|---|---|---|---|
-| `reasoning_effort` | OpenAI、Ollama、Gemini | `"reasoning_effort": "medium"` | 不发送 |
-| `enable_thinking` | 通义千问、硅基流动 | `"enable_thinking": true` | `false` |
-| `thinking.type` | 智谱 GLM、DeepSeek、豆包 | `"thinking": {"type": "enabled"}` | `disabled` |
-| `reasoning` | OpenRouter | `"reasoning": {"effort": "medium"}` | 不发送 |
-| 不发送 | Kimi K2 Thinking、DeepSeek Reasoner 等自带思考的模型 | — | — |
-
-思考内容会从响应的 `reasoning_content` / `reasoning` 字段读取，模型如果把思考写在正文的 `<think>…</think>` 里也会被识别出来。
-
-Anthropic 协议用官方 Go SDK：Claude 4.6 及以后的模型用自适应思考（`{"type": "adaptive", "display": "summarized"}`，思考摘要实时显示），更早的 Claude 和其他兼容 Anthropic 协议的服务用思考预算（`budget_tokens`）。
-
-## 数据存放位置
-
-对话和设置（包括 API Key）只保存在本机，文件权限仅当前用户可读：
+只存在本机，文件仅当前用户可读：
 
 - macOS：`~/Library/Application Support/Murmur/`
 - Windows：`%AppData%\Murmur\`
 
+`settings.json` 是模型和设置（API Key 以明文保存在这里），`chats.json` 是全部对话。删掉这个文件夹就清空了所有对话和设置。
+
+**连不上或者报错？**
+
+在「设置 → 模型」里点「测试连接」，会显示具体的错误。先检查接口地址、API Key 和模型 ID；需要代理才能访问的服务，在「设置 → 通用 → 网络代理」里填上代理地址。
+
+**打开了深度思考，却看不到思考过程？**
+
+首先模型本身要支持思考。各家打开思考的参数不一样，Murmur 默认按接口地址自动识别；识别不对时，在「设置 → 模型 → 思考参数」里手动选：
+
+| 思考参数 | 适用于 |
+|---|---|
+| `reasoning_effort` | OpenAI、Ollama、Gemini |
+| `enable_thinking` | 通义千问、硅基流动 |
+| `thinking.type` | 智谱 GLM、DeepSeek、豆包 |
+| `reasoning` | OpenRouter |
+| 不发送 | Kimi K2 Thinking、DeepSeek Reasoner 等总会思考的模型 |
+
+Anthropic 协议的模型不用选，Murmur 会自动处理。
+
 ## 开发
 
-需要 Go 1.27 及以上。
-
-```sh
-go tool mygo dev      # 开发模式，改代码自动重启
-go test ./...         # 测试（界面测试不需要窗口）
-MURMUR_SNAPSHOTS=1 go test .   # 顺便把界面渲染成 testdata/*.png
-```
-
-## 打包
-
-MyGo 不需要 cgo，一台 Mac 就能打出所有平台的包：
-
-```sh
-go tool mygo build -platform darwin/universal,windows/amd64,windows/arm64
-```
-
-产物在 `build/` 下：
-
-- `darwin-universal/Murmur 0.1.0.dmg`：macOS 安装镜像（Intel 和 Apple 芯片通用，macOS 12+）
-- `windows-amd64/Murmur Setup 0.1.0 amd64.exe`：Windows 安装程序（Windows 10/11），同目录的 `Murmur.exe` 是免安装版
-- `windows-arm64/`：ARM 版 Windows
-
-生成 Windows 安装程序需要 NSIS（`brew install makensis`），没装的话只会输出免安装的 `Murmur.exe`。
-
-### 发布版本
-
-推一个版本标签，GitHub Actions（`.github/workflows/release.yml`）会跑测试、打包，并把安装包挂到同名的 GitHub Release 上：
-
-```sh
-git tag v0.2.0
-git push origin v0.2.0
-```
-
-- 版本号以标签为准（去掉开头的 `v`），构建前写进 `mygo.json`，安装包文件名和设置页里显示的版本都跟着变，不用手动改
-- 标签带 `-` 的（如 `v0.2.0-beta.1`）发成预发布版本
-- 也可以先在 GitHub 网页上新建 Release 并创建标签，CI 会把安装包补传到这个 Release
-- Release 附件：`Murmur-<版本>-macos-universal.dmg`、`Murmur-Setup-<版本>-windows-{amd64,arm64}.exe`、`Murmur-<版本>-windows-{amd64,arm64}-portable.zip`（免安装版）和 `SHA256SUMS.txt`
-- 在 Actions 页手动运行这个 workflow 只打包、不发布，安装包在运行记录的 Artifacts 里
-
-### 关于签名
-
-现在的包没有正式签名（macOS 是 ad-hoc 签名）：
-
-- macOS 首次打开会提示「无法验证开发者」：在「应用程序」里右键 Murmur →「打开」，或者执行 `xattr -dr com.apple.quarantine /Applications/Murmur.app`
-- Windows 可能弹出 SmartScreen：点「更多信息」→「仍要运行」
-
-正式分发时在 `mygo.json` 里配置 `macos.signingIdentity` / `macos.notarize` 和 `windows.certificate`，详见 [MyGo 打包文档](https://mygo.egoist.dev/docs/distribution)。
-
-## 项目结构
-
-```
-main.go       窗口和入口
-app.go        应用状态：发送、流式接收、停止、重新生成
-view.go       主界面：侧边栏、消息列表、输入框
-settings.go   设置面板：模型管理、系统提示词、代理
-store.go      设置和对话的读写
-presets.go    服务商预设
-llm/          模型调用：OpenAI 兼容（SSE）和 Anthropic（官方 SDK）
-demo.go       演示构建（-tags demo），连本地模型自动跑一遍并截图
-```
+想自己编译或参与开发，见[开发文档](docs/development.md)。
