@@ -1,0 +1,10 @@
+{
+  "name": "Murmur",
+  "identifier": "app.murmur.chat",
+  "version": "0.1.0",
+  "copyright": "© 2026 Murmur",
+  "out": "build",
+  "linux": {
+    "comment": "A minimal AI chat"
+  }
+}
