@@ -45,6 +45,13 @@ OpenAI 兼容协议下，各家打开思考的方式不一样。「思考参数�
 
 Anthropic 协议用官方 Go SDK：Claude 4.6 及以后的模型用自适应思考（`{"type": "adaptive", "display": "summarized"}`，思考摘要实时显示），更早的 Claude 和其他兼容 Anthropic 协议的服务用思考预算（`budget_tokens`）。
 
+## Token 用量的实现
+
+- OpenAI 兼容协议的请求带 `"stream_options": {"include_usage": true}`，从最后一个分块的 `usage` 读 `prompt_tokens` / `completion_tokens`；Kimi 放在 `choices[0].usage` 里，有的服务每个分块都带到目前为止的用量，都取最后一次
+- 不认 `stream_options` 的服务：返回 4xx、错误信息里提到 `stream_options` 时，去掉这个参数重发一次，这条回复就没有用量
+- Anthropic 协议从 `message_start` 读起，`message_delta` 里的是到目前为止的总数，覆盖之前的值，没给的字段保留 `message_start` 的；输入算上缓存：`input_tokens` + `cache_creation_input_tokens` + `cache_read_input_tokens`
+- 回复正常结束后才发出用量（`llm.Event.Usage`），停止、出错的回复没有用量，界面上不显示；用量存在 `chats.json` 消息的 `input_tokens` / `output_tokens` 里，没有这两个字段的旧对话也不显示
+
 ## 图片的实现
 
 - 选择（系统文件对话框）、拖入对话区、粘贴（截图，或在访达 / 资源管理器里复制的图片文件）三种方式添加，读取和缩放都在后台 goroutine 里做

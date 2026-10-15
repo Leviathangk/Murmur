@@ -84,6 +84,10 @@ type Message struct {
 	Error     string    `json:"error,omitempty"`
 	Images    []*Image  `json:"images,omitempty"` // the user's pictures
 	Time      time.Time `json:"time"`
+	// The tokens a reply took, as the provider told them: those it read,
+	// and those it wrote.
+	InputTokens  int `json:"input_tokens,omitempty"`
+	OutputTokens int `json:"output_tokens,omitempty"`
 
 	key        int       // identifies the message in the list
 	streaming  bool      // the reply is still coming

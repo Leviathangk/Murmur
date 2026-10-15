@@ -75,11 +75,21 @@ type Request struct {
 type Event struct {
 	Reasoning string
 	Text      string
+	// Usage comes once the reply has ended, when the provider tells it.
+	Usage *Usage
+}
+
+// Usage is how many tokens a reply took: Input those of the request the
+// model read, the system prompt and earlier turns included, and Output
+// those it wrote, its reasoning included.
+type Usage struct {
+	Input, Output int
 }
 
 // Stream sends req to the model and calls emit with each piece of the
 // reply as it comes, on the calling goroutine, until the reply ends, ctx
-// is canceled or the request fails.
+// is canceled or the request fails. When the reply ends, a last event
+// tells its usage, if the provider does.
 func Stream(ctx context.Context, cfg Config, req Request, emit func(Event)) error {
 	if strings.TrimSpace(cfg.Model) == "" {
 		return fmt.Errorf("没有填写模型 ID")

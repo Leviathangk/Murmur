@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -463,7 +464,41 @@ func (a *app) actions(c *ui.Context, ch *Chat, i int) {
 		if m.Model != "" {
 			ui.Text(c, m.Model).FontSize(12).TextColor(t.TextMuted).Margin(0, 0, 0, 6)
 		}
+		if s := usageLabel(m); s != "" {
+			left := float32(6)
+			if m.Model != "" {
+				ui.Text(c, "·").FontSize(12).TextColor(t.TextMuted).Margin(0, 0, 0, 2)
+				left = 2
+			}
+			ui.Text(c, s).FontSize(12).TextColor(t.TextMuted).Margin(0, 0, 0, left).
+				Tooltip("输入包括系统提示词和之前的对话，输出包括思考过程")
+		}
 	})
+}
+
+// usageLabel says how many tokens reply m took, or "" when it is not
+// known: the provider did not tell, or the reply stopped or failed.
+func usageLabel(m *Message) string {
+	var parts []string
+	if m.InputTokens > 0 {
+		parts = append(parts, "输入 "+thousands(m.InputTokens))
+	}
+	if m.OutputTokens > 0 {
+		parts = append(parts, "输出 "+thousands(m.OutputTokens))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return strings.Join(parts, " · ") + " tokens"
+}
+
+// thousands writes n, not negative, with commas between its thousands.
+func thousands(n int) string {
+	s := strconv.Itoa(n)
+	for i := len(s) - 3; i > 0; i -= 3 {
+		s = s[:i] + "," + s[i:]
+	}
+	return s
 }
 
 // composer is where the user writes, with the images attached above the

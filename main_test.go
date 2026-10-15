@@ -35,6 +35,7 @@ func testApp(t *testing.T) (*app, *[]llm.Request) {
 		}
 		emit(llm.Event{Text: "**你好**！"})
 		emit(llm.Event{Text: "有什么可以帮你？"})
+		emit(llm.Event{Usage: &llm.Usage{Input: 1234, Output: 56}})
 		return nil
 	}
 	return a, &reqs
@@ -145,6 +146,57 @@ func TestChat(t *testing.T) {
 	}
 	if len(b.settings.Models) != 1 || b.settings.Models[0].APIKey != "sk-test" || b.settings.Thinking {
 		t.Errorf("loaded settings %+v", b.settings)
+	}
+}
+
+func TestUsage(t *testing.T) {
+	a, _ := testApp(t)
+	a.addModel(presets[2]) // DeepSeek
+	tt := ui.NewTester(a.view, 1080, 720)
+	a.send("你好")
+	tt.Frame()
+	if m := a.current.Messages[1]; m.InputTokens != 1234 || m.OutputTokens != 56 {
+		t.Fatalf("usage %d, %d", m.InputTokens, m.OutputTokens)
+	}
+	const label = "输入 1,234 · 输出 56 tokens"
+	r, ok := tt.Find(label)
+	if !ok {
+		t.Fatalf("no usage in %q", tt.Texts())
+	}
+	// What it counts shows when the pointer rests on it.
+	tt.Move(r.X+r.W/2, r.Y+r.H/2)
+	tt.Frame()
+	time.Sleep(700 * time.Millisecond)
+	tt.Frame()
+	if !tt.HasText("输入包括系统提示词和之前的对话，输出包括思考过程") {
+		t.Errorf("no tooltip in %q", tt.Texts())
+	}
+	if m := newApp(a.store).chats[0].Messages[1]; m.InputTokens != 1234 || m.OutputTokens != 56 {
+		t.Errorf("saved usage %d, %d", m.InputTokens, m.OutputTokens)
+	}
+
+	// Nothing shows for a reply whose provider does not tell it.
+	a.stream = func(ctx context.Context, cfg llm.Config, req llm.Request, emit func(llm.Event)) error {
+		emit(llm.Event{Text: "好的"})
+		return nil
+	}
+	a.regenerate(a.current)
+	tt.Frame()
+	if m := a.current.Messages[1]; m.Content != "好的" || m.InputTokens != 0 || m.OutputTokens != 0 {
+		t.Fatalf("message %+v", m)
+	}
+	for _, s := range tt.Texts() {
+		if strings.HasSuffix(s, " tokens") {
+			t.Errorf("usage %q shown", s)
+		}
+	}
+}
+
+func TestThousands(t *testing.T) {
+	for n, want := range map[int]string{0: "0", 7: "7", 999: "999", 1000: "1,000", 12345: "12,345", 1234567: "1,234,567"} {
+		if got := thousands(n); got != want {
+			t.Errorf("%d: %q, want %q", n, got, want)
+		}
 	}
 }
 

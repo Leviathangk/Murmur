@@ -11,12 +11,16 @@ import (
 	"testing"
 )
 
-// collect runs Stream and returns the reasoning and the text it emitted.
-func collect(t *testing.T, cfg Config, req Request) (reasoning, text string, err error) {
+// collect runs Stream and returns the reasoning, the text and the usage it
+// emitted.
+func collect(t *testing.T, cfg Config, req Request) (reasoning, text string, usage *Usage, err error) {
 	t.Helper()
 	err = Stream(context.Background(), cfg, req, func(e Event) {
 		reasoning += e.Reasoning
 		text += e.Text
+		if e.Usage != nil {
+			usage = e.Usage
+		}
 	})
 	return
 }
@@ -134,7 +138,7 @@ func TestOpenAIImages(t *testing.T) {
 		fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\ndata: [DONE]\n\n")
 	}))
 	defer srv.Close()
-	if _, _, err := collect(t, Config{BaseURL: srv.URL, Model: "m"}, imageRequest); err != nil {
+	if _, _, _, err := collect(t, Config{BaseURL: srv.URL, Model: "m"}, imageRequest); err != nil {
 		t.Fatal(err)
 	}
 	msgs, _ := json.Marshal(body["messages"])
@@ -180,8 +184,9 @@ func TestOpenAIStream(t *testing.T) {
 		for _, d := range []string{
 			`{"choices":[{"delta":{"role":"assistant","reasoning_content":"Let me "}}]}`,
 			`{"choices":[{"delta":{"reasoning_content":"think."}}]}`,
-			`{"choices":[{"delta":{"content":"Hi"}}]}`,
-			`{"choices":[{"delta":{"content":" there"}}]}`,
+			`{"choices":[{"delta":{"content":"Hi"}}],"usage":null}`,
+			`{"choices":[{"delta":{"content":" there"}}],"usage":null}`,
+			`{"choices":[],"usage":{"prompt_tokens":12,"completion_tokens":34,"total_tokens":46}}`,
 			`[DONE]`,
 		} {
 			fmt.Fprintf(w, "data: %s\n\n", d)
@@ -190,12 +195,18 @@ func TestOpenAIStream(t *testing.T) {
 	defer srv.Close()
 
 	cfg := Config{Protocol: OpenAI, BaseURL: srv.URL + "/v1/", APIKey: "sk-test", Model: "m", ThinkStyle: ThinkType}
-	r, x, err := collect(t, cfg, Request{System: "be brief", Messages: []Message{{Role: "user", Content: "hello"}}, Thinking: true})
+	r, x, u, err := collect(t, cfg, Request{System: "be brief", Messages: []Message{{Role: "user", Content: "hello"}}, Thinking: true})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if r != "Let me think." || x != "Hi there" {
 		t.Errorf("reasoning %q, text %q", r, x)
+	}
+	if u == nil || *u != (Usage{Input: 12, Output: 34}) {
+		t.Errorf("usage %+v", u)
+	}
+	if so, _ := json.Marshal(body["stream_options"]); string(so) != `{"include_usage":true}` {
+		t.Errorf("stream_options %s", so)
 	}
 	if auth != "Bearer sk-test" {
 		t.Errorf("authorization %q", auth)
@@ -209,7 +220,7 @@ func TestOpenAIStream(t *testing.T) {
 	}
 
 	cfg.ThinkStyle = ThinkEnable
-	if _, _, err := collect(t, cfg, Request{Messages: []Message{{Role: "user", Content: "hello"}}}); err != nil {
+	if _, _, _, err := collect(t, cfg, Request{Messages: []Message{{Role: "user", Content: "hello"}}}); err != nil {
 		t.Fatal(err)
 	}
 	if body["enable_thinking"] != false {
@@ -217,15 +228,71 @@ func TestOpenAIStream(t *testing.T) {
 	}
 }
 
-func TestOpenAIError(t *testing.T) {
+func TestOpenAIUsage(t *testing.T) {
+	var bodies []map[string]any
+	var reply []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		json.NewDecoder(r.Body).Decode(&body)
+		bodies = append(bodies, body)
+		if _, ok := body["stream_options"]; ok && r.URL.Path == "/strict/chat/completions" {
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			io.WriteString(w, `{"object":"error","message":{"detail":[{"type":"extra_forbidden","loc":["body","stream_options"],"msg":"Extra inputs are not permitted"}]}}`)
+			return
+		}
+		for _, d := range reply {
+			fmt.Fprintf(w, "data: %s\n\n", d)
+		}
+	}))
+	defer srv.Close()
+	hello := Request{Messages: []Message{{Role: "user", Content: "hello"}}}
+
+	// Kimi tells it in the last choice.
+	reply = []string{
+		`{"choices":[{"delta":{"content":"Hi"}}]}`,
+		`{"choices":[{"delta":{},"finish_reason":"stop","usage":{"prompt_tokens":8,"completion_tokens":2}}]}`,
+		`[DONE]`,
+	}
+	if _, _, u, err := collect(t, Config{BaseURL: srv.URL, Model: "m"}, hello); err != nil || u == nil || *u != (Usage{Input: 8, Output: 2}) {
+		t.Errorf("usage %+v, error %v", u, err)
+	}
+
+	// Some tell it so far in each chunk: the last counts.
+	reply = []string{
+		`{"choices":[{"delta":{"content":"Hi"}}],"usage":{"prompt_tokens":8,"completion_tokens":1}}`,
+		`{"choices":[{"delta":{"content":"!"}}],"usage":{"prompt_tokens":8,"completion_tokens":2}}`,
+	}
+	if _, _, u, err := collect(t, Config{BaseURL: srv.URL, Model: "m"}, hello); err != nil || u == nil || *u != (Usage{Input: 8, Output: 2}) {
+		t.Errorf("usage %+v, error %v", u, err)
+	}
+
+	// A provider that does not take stream_options is asked again without
+	// it, and replies without the usage.
+	reply = []string{`{"choices":[{"delta":{"content":"Hi"}}]}`, `[DONE]`}
+	bodies = nil
+	_, x, u, err := collect(t, Config{BaseURL: srv.URL + "/strict", Model: "m"}, hello)
+	if err != nil || x != "Hi" || u != nil {
+		t.Errorf("text %q, usage %+v, error %v", x, u, err)
+	}
+	if len(bodies) != 2 || bodies[1]["stream_options"] != nil || bodies[1]["model"] != "m" {
+		t.Errorf("requests %v", bodies)
+	}
+}
+
+func TestOpenAIError(t *testing.T) {
+	n := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n++
 		w.WriteHeader(http.StatusUnauthorized)
 		io.WriteString(w, `{"error":{"message":"Incorrect API key provided","type":"invalid_request_error"}}`)
 	}))
 	defer srv.Close()
-	_, _, err := collect(t, Config{BaseURL: srv.URL, Model: "m"}, Request{Messages: []Message{{Role: "user", Content: "hello"}}})
+	_, _, _, err := collect(t, Config{BaseURL: srv.URL, Model: "m"}, Request{Messages: []Message{{Role: "user", Content: "hello"}}})
 	if err == nil || !strings.Contains(err.Error(), "401") || !strings.Contains(err.Error(), "Incorrect API key") {
 		t.Errorf("error %v", err)
+	}
+	if n != 1 {
+		t.Errorf("asked %d times", n)
 	}
 }
 
@@ -242,7 +309,7 @@ func TestAnthropicStream(t *testing.T) {
 		json.NewDecoder(r.Body).Decode(&body)
 		w.Header().Set("Content-Type", "text/event-stream")
 		events := []struct{ name, data string }{
-			{"message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","model":"claude-opus-5","content":[],"stop_reason":null,"usage":{"input_tokens":5,"output_tokens":1}}}`},
+			{"message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","model":"claude-opus-5","content":[],"stop_reason":null,"usage":{"input_tokens":5,"cache_read_input_tokens":100,"output_tokens":1}}}`},
 			{"content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":"","signature":""}}`},
 			{"content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"Pondering."}}`},
 			{"content_block_stop", `{"type":"content_block_stop","index":0}`},
@@ -260,12 +327,16 @@ func TestAnthropicStream(t *testing.T) {
 	defer srv.Close()
 
 	cfg := Config{Protocol: Anthropic, BaseURL: srv.URL + "/v1", APIKey: "ak", Model: "claude-opus-5"}
-	r, x, err := collect(t, cfg, Request{System: "sys", Messages: []Message{{Role: "user", Content: "hi"}}, Thinking: true})
+	r, x, u, err := collect(t, cfg, Request{System: "sys", Messages: []Message{{Role: "user", Content: "hi"}}, Thinking: true})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if r != "Pondering." || x != "Hello!" {
 		t.Errorf("reasoning %q, text %q", r, x)
+	}
+	// What was read from the cache counts as read.
+	if u == nil || *u != (Usage{Input: 105, Output: 9}) {
+		t.Errorf("usage %+v", u)
 	}
 	if key != "ak" {
 		t.Errorf("api key %q", key)

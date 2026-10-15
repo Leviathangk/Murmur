@@ -220,6 +220,9 @@ func (a *app) reply(c *Chat, m *Model) {
 					}
 					reply.Content += e.Text
 				}
+				if u := e.Usage; u != nil {
+					reply.InputTokens, reply.OutputTokens = u.Input, u.Output
+				}
 			})
 		})
 		a.update(func() {

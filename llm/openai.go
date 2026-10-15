@@ -89,8 +89,15 @@ type openAIChunk struct {
 			ReasoningContent string `json:"reasoning_content"`
 			Reasoning        string `json:"reasoning"`
 		} `json:"delta"`
+		Usage *openAIUsage `json:"usage"` // where Kimi tells it
 	} `json:"choices"`
-	Error *apiError `json:"error"`
+	Usage *openAIUsage `json:"usage"`
+	Error *apiError    `json:"error"`
+}
+
+type openAIUsage struct {
+	PromptTokens     int `json:"prompt_tokens"`
+	CompletionTokens int `json:"completion_tokens"`
 }
 
 type apiError struct {
@@ -108,9 +115,10 @@ func streamOpenAI(ctx context.Context, client *http.Client, cfg Config, req Requ
 		msgs = append(msgs, map[string]any{"role": m.Role, "content": openAIContent(m)})
 	}
 	body := map[string]any{
-		"model":    strings.TrimSpace(cfg.Model),
-		"messages": msgs,
-		"stream":   true,
+		"model":          strings.TrimSpace(cfg.Model),
+		"messages":       msgs,
+		"stream":         true,
+		"stream_options": map[string]any{"include_usage": true},
 	}
 	if cfg.MaxTokens > 0 {
 		// OpenAI's reasoning models take only the newer name.
@@ -121,29 +129,28 @@ func streamOpenAI(ctx context.Context, client *http.Client, cfg Config, req Requ
 		}
 	}
 	applyThinking(body, ResolveThinkStyle(cfg.ThinkStyle, cfg.BaseURL), req.Thinking)
-	b, err := json.Marshal(body)
-	if err != nil {
-		return err
-	}
-	hreq, err := http.NewRequestWithContext(ctx, http.MethodPost, chatURL(cfg.BaseURL), bytes.NewReader(b))
-	if err != nil {
-		return err
-	}
-	hreq.Header.Set("Content-Type", "application/json")
-	hreq.Header.Set("Accept", "text/event-stream")
-	if k := strings.TrimSpace(cfg.APIKey); k != "" {
-		hreq.Header.Set("Authorization", "Bearer "+k)
-	}
-	resp, err := client.Do(hreq)
-	if err != nil {
-		return err
+	var resp *http.Response
+	for {
+		var err error
+		if resp, err = postChat(ctx, client, cfg, body); err != nil {
+			return err
+		}
+		if resp.StatusCode/100 == 2 {
+			break
+		}
+		err = httpError(resp)
+		resp.Body.Close()
+		// Not every provider takes stream_options: ask again without it,
+		// for the reply without its usage.
+		if _, ok := body["stream_options"]; !ok || resp.StatusCode/100 != 4 || !strings.Contains(err.Error(), "stream_options") {
+			return err
+		}
+		delete(body, "stream_options")
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode/100 != 2 {
-		return httpError(resp)
-	}
 
 	var think thinkSplitter
+	var usage *Usage
 	sc := bufio.NewScanner(resp.Body)
 	sc.Buffer(make([]byte, 64*1024), 8*1024*1024)
 	for sc.Scan() {
@@ -163,6 +170,10 @@ func streamOpenAI(ctx context.Context, client *http.Client, cfg Config, req Requ
 		if chunk.Error != nil && chunk.Error.Message != "" {
 			return fmt.Errorf("%s", chunk.Error.Message)
 		}
+		// The usage comes in the last chunk, or so far in each.
+		if u := chunk.Usage; u != nil {
+			usage = &Usage{Input: u.PromptTokens, Output: u.CompletionTokens}
+		}
 		for _, ch := range chunk.Choices {
 			d := ch.Delta
 			if r := d.ReasoningContent + d.Reasoning; r != "" {
@@ -170,6 +181,9 @@ func streamOpenAI(ctx context.Context, client *http.Client, cfg Config, req Requ
 			}
 			if d.Content != "" {
 				think.feed(d.Content, emit)
+			}
+			if u := ch.Usage; u != nil {
+				usage = &Usage{Input: u.PromptTokens, Output: u.CompletionTokens}
 			}
 		}
 	}
@@ -180,7 +194,28 @@ func streamOpenAI(ctx context.Context, client *http.Client, cfg Config, req Requ
 		}
 		return err
 	}
+	if usage != nil && (usage.Input > 0 || usage.Output > 0) {
+		emit(Event{Usage: usage})
+	}
 	return nil
+}
+
+// postChat sends body to the Chat Completions endpoint of cfg.
+func postChat(ctx context.Context, client *http.Client, cfg Config, body map[string]any) (*http.Response, error) {
+	b, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	hreq, err := http.NewRequestWithContext(ctx, http.MethodPost, chatURL(cfg.BaseURL), bytes.NewReader(b))
+	if err != nil {
+		return nil, err
+	}
+	hreq.Header.Set("Content-Type", "application/json")
+	hreq.Header.Set("Accept", "text/event-stream")
+	if k := strings.TrimSpace(cfg.APIKey); k != "" {
+		hreq.Header.Set("Authorization", "Bearer "+k)
+	}
+	return client.Do(hreq)
 }
 
 // openAIContent returns the content of m: its text, or with images, a part

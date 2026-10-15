@@ -122,8 +122,11 @@ func streamAnthropic(ctx context.Context, client *http.Client, cfg Config, req R
 	stream := c.Messages.NewStreaming(ctx, params)
 	defer stream.Close()
 	refused := false
+	var usage anthropic.Usage
 	for stream.Next() {
 		switch ev := stream.Current().AsAny().(type) {
+		case anthropic.MessageStartEvent:
+			usage = ev.Message.Usage
 		case anthropic.ContentBlockDeltaEvent:
 			switch d := ev.Delta.AsAny().(type) {
 			case anthropic.TextDelta:
@@ -134,6 +137,19 @@ func streamAnthropic(ctx context.Context, client *http.Client, cfg Config, req R
 		case anthropic.MessageDeltaEvent:
 			if ev.Delta.StopReason == anthropic.StopReasonRefusal {
 				refused = true
+			}
+			// The counts here are totals so far, those left out unchanged
+			// since message_start.
+			u := ev.Usage
+			usage.OutputTokens = u.OutputTokens
+			if u.JSON.InputTokens.Valid() {
+				usage.InputTokens = u.InputTokens
+			}
+			if u.JSON.CacheCreationInputTokens.Valid() {
+				usage.CacheCreationInputTokens = u.CacheCreationInputTokens
+			}
+			if u.JSON.CacheReadInputTokens.Valid() {
+				usage.CacheReadInputTokens = u.CacheReadInputTokens
 			}
 		}
 	}
@@ -146,6 +162,11 @@ func streamAnthropic(ctx context.Context, client *http.Client, cfg Config, req R
 	}
 	if refused {
 		return fmt.Errorf("模型拒绝回答这个请求")
+	}
+	// What was read from the cache, or written to it, was read too.
+	in := usage.InputTokens + usage.CacheCreationInputTokens + usage.CacheReadInputTokens
+	if in > 0 || usage.OutputTokens > 0 {
+		emit(Event{Usage: &Usage{Input: int(in), Output: int(usage.OutputTokens)}})
 	}
 	return nil
 }
