@@ -218,16 +218,18 @@ func postChat(ctx context.Context, client *http.Client, cfg Config, body map[str
 	return client.Do(hreq)
 }
 
-// openAIContent returns the content of m: its text, or with images, a part
-// of its text and one of each image, as a data URL. A turn of text alone
-// stays a string, which every provider takes.
+// openAIContent returns the content of m: its text, that of its documents
+// before it, or with images, a part of that text and one of each image, as
+// a data URL. A turn of text alone stays a string, which every provider
+// takes.
 func openAIContent(m Message) any {
+	text := m.text()
 	if len(m.Images) == 0 {
-		return m.Content
+		return text
 	}
 	var parts []map[string]any
-	if strings.TrimSpace(m.Content) != "" {
-		parts = append(parts, map[string]any{"type": "text", "text": m.Content})
+	if strings.TrimSpace(text) != "" {
+		parts = append(parts, map[string]any{"type": "text", "text": text})
 	}
 	for _, img := range m.Images {
 		url := "data:" + img.MIME + ";base64," + base64.StdEncoding.EncodeToString(img.Data)

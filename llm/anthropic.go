@@ -91,8 +91,8 @@ func streamAnthropic(ctx context.Context, client *http.Client, cfg Config, req R
 		for _, img := range m.Images {
 			blocks = append(blocks, anthropic.NewImageBlockBase64(img.MIME, base64.StdEncoding.EncodeToString(img.Data)))
 		}
-		if strings.TrimSpace(m.Content) != "" || len(blocks) == 0 {
-			blocks = append(blocks, anthropic.NewTextBlock(m.Content))
+		if text := m.text(); strings.TrimSpace(text) != "" || len(blocks) == 0 {
+			blocks = append(blocks, anthropic.NewTextBlock(text))
 		}
 		if m.Role == "assistant" {
 			params.Messages = append(params.Messages, anthropic.NewAssistantMessage(blocks...))

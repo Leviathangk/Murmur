@@ -121,6 +121,73 @@ func TestNormalize(t *testing.T) {
 	if len(in[0].Images) != 1 || in[0].Images[0].MIME != "image/png" || len(in[1].Images) != 1 {
 		t.Errorf("the input changed: %+v", in)
 	}
+
+	// So is a turn of files alone.
+	d, e := Document{Name: "a.pdf", Text: "A"}, Document{Name: "b.csv", Text: "B"}
+	got = normalize([]Message{
+		{Role: "user", Documents: []Document{d}},
+		{Role: "assistant", Content: "?"},
+		{Role: "user", Documents: []Document{e}},
+		{Role: "user", Content: "compare"},
+	})
+	if len(got) != 3 || len(got[0].Documents) != 1 || got[2].Content != "compare" || len(got[2].Documents) != 1 || got[2].Documents[0] != e {
+		t.Errorf("documents joined into %+v", got)
+	}
+}
+
+// documentRequest is a turn of two files and a question, and one of a file
+// alone.
+var documentRequest = Request{Messages: []Message{
+	{Role: "user", Content: "总结一下", Documents: []Document{{Name: "周报.pdf", Text: "本周完成了发送文档"}, {Name: `a "b".csv`, Text: "x,y"}}},
+	{Role: "assistant", Content: "好的"},
+	{Role: "user", Documents: []Document{{Name: "c.txt", Text: "C"}}, Images: []Image{{MIME: "image/png", Data: []byte("png")}}},
+}}
+
+// The files go as text before the question, which every model reads.
+func TestDocuments(t *testing.T) {
+	var body map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&body)
+		if strings.HasSuffix(r.URL.Path, "/messages") {
+			w.Header().Set("Content-Type", "text/event-stream")
+			fmt.Fprint(w, "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n")
+			return
+		}
+		fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\ndata: [DONE]\n\n")
+	}))
+	defer srv.Close()
+	first := "<file name=\"周报.pdf\">\n本周完成了发送文档\n</file>\n\n<file name=\"a \\\"b\\\".csv\">\nx,y\n</file>\n\n总结一下"
+	last := "<file name=\"c.txt\">\nC\n</file>"
+
+	if _, _, _, err := collect(t, Config{BaseURL: srv.URL, Model: "m"}, documentRequest); err != nil {
+		t.Fatal(err)
+	}
+	msgs, _ := json.Marshal(body["messages"])
+	want, _ := json.Marshal([]any{
+		map[string]any{"role": "user", "content": first},
+		map[string]any{"role": "assistant", "content": "好的"},
+		map[string]any{"role": "user", "content": []any{
+			map[string]any{"type": "text", "text": last},
+			map[string]any{"type": "image_url", "image_url": map[string]any{"url": "data:image/png;base64,cG5n"}},
+		}},
+	})
+	if string(msgs) != string(want) {
+		t.Errorf("OpenAI messages %s\nwant %s", msgs, want)
+	}
+
+	collect(t, Config{Protocol: Anthropic, BaseURL: srv.URL, APIKey: "ak", Model: "claude-opus-5"}, documentRequest)
+	msgs, _ = json.Marshal(body["messages"])
+	want, _ = json.Marshal([]any{
+		map[string]any{"role": "user", "content": []any{map[string]any{"type": "text", "text": first}}},
+		map[string]any{"role": "assistant", "content": []any{map[string]any{"type": "text", "text": "好的"}}},
+		map[string]any{"role": "user", "content": []any{
+			map[string]any{"type": "image", "source": map[string]any{"type": "base64", "media_type": "image/png", "data": "cG5n"}},
+			map[string]any{"type": "text", "text": last},
+		}},
+	})
+	if string(msgs) != string(want) {
+		t.Errorf("Anthropic messages %s\nwant %s", msgs, want)
+	}
 }
 
 // imageRequest is a turn of a picture and a question, and one of a

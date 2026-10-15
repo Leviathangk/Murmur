@@ -51,9 +51,10 @@ type Config struct {
 
 // Message is a turn of the conversation: Role is "user" or "assistant".
 type Message struct {
-	Role    string
-	Content string
-	Images  []Image // the pictures of a user's turn
+	Role      string
+	Content   string
+	Images    []Image    // the pictures of a user's turn
+	Documents []Document // the files of a user's turn
 }
 
 // Image is a picture the model looks at: PNG, JPEG, GIF or WebP data, of
@@ -61,6 +62,27 @@ type Message struct {
 type Image struct {
 	MIME string
 	Data []byte
+}
+
+// Document is a file the model reads as its text, as a PDF or a sheet is
+// read before it is sent.
+type Document struct {
+	Name string
+	Text string
+}
+
+// text returns the content of m after the text of its documents, each in
+// tags that name it: any model reads them so, whatever files it takes.
+func (m Message) text() string {
+	if len(m.Documents) == 0 {
+		return m.Content
+	}
+	var b strings.Builder
+	for _, d := range m.Documents {
+		fmt.Fprintf(&b, "<file name=%q>\n%s\n</file>\n\n", d.Name, d.Text)
+	}
+	b.WriteString(m.Content)
+	return strings.TrimRight(b.String(), "\n")
 }
 
 // Request is what to send: the system prompt, the conversation, and
@@ -116,7 +138,7 @@ func Stream(ctx context.Context, cfg Config, req Request, emit func(Event)) erro
 func normalize(msgs []Message) []Message {
 	var out []Message
 	for _, m := range msgs {
-		if strings.TrimSpace(m.Content) == "" && len(m.Images) == 0 {
+		if strings.TrimSpace(m.Content) == "" && len(m.Images) == 0 && len(m.Documents) == 0 {
 			continue
 		}
 		if n := len(out); n > 0 && out[n-1].Role == m.Role {
@@ -128,6 +150,7 @@ func normalize(msgs []Message) []Message {
 				prev.Content += "\n\n" + m.Content
 			}
 			prev.Images = slices.Concat(prev.Images, m.Images)
+			prev.Documents = slices.Concat(prev.Documents, m.Documents)
 			continue
 		}
 		out = append(out, m)

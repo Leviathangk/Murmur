@@ -215,19 +215,19 @@ func TestAttachFiles(t *testing.T) {
 	dir := t.TempDir()
 	small := filepath.Join(dir, "small.png")
 	os.WriteFile(small, pngOf(t, picture(80, 60, 255)), 0o644)
-	notes := filepath.Join(dir, "notes.txt")
-	os.WriteFile(notes, []byte("hello"), 0o644)
-	a.openImages = func() ([]string, error) { return []string{small, notes}, nil }
+	photo := filepath.Join(dir, "photo.heic")
+	os.WriteFile(photo, []byte("ftypheic"), 0o644)
+	a.openFiles = func() ([]string, error) { return []string{small, photo}, nil }
 
 	tt := ui.NewTester(a.view, 1080, 720)
-	if err := tt.Click("添加图片"); err != nil {
+	if err := tt.Click("添加图片或文件"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
 	if len(a.pending) != 1 || a.pending[0].W != 80 || a.pending[0].H != 60 {
 		t.Fatalf("attached %+v", a.pending)
 	}
-	if !tt.HasText("没有添加：notes.txt：不是支持的图片格式（PNG、JPEG、GIF、WebP、BMP）") {
+	if !tt.HasText("没有添加：photo.heic：不是支持的图片格式（PNG、JPEG、GIF、WebP、BMP）") {
 		t.Errorf("no toast in %q", tt.Texts())
 	}
 

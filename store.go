@@ -79,14 +79,15 @@ func (s *Settings) model(id string) *Model {
 
 // Message is a turn of a chat.
 type Message struct {
-	Role      string    `json:"role"` // "user" or "assistant"
-	Content   string    `json:"content"`
-	Reasoning string    `json:"reasoning,omitempty"`
-	ThinkMS   int64     `json:"think_ms,omitempty"` // how long the model thought
-	Model     string    `json:"model,omitempty"`    // the name of the model that replied
-	Error     string    `json:"error,omitempty"`
-	Images    []*Image  `json:"images,omitempty"` // the user's pictures
-	Time      time.Time `json:"time"`
+	Role      string      `json:"role"` // "user" or "assistant"
+	Content   string      `json:"content"`
+	Reasoning string      `json:"reasoning,omitempty"`
+	ThinkMS   int64       `json:"think_ms,omitempty"` // how long the model thought
+	Model     string      `json:"model,omitempty"`    // the name of the model that replied
+	Error     string      `json:"error,omitempty"`
+	Images    []*Image    `json:"images,omitempty"`    // the user's pictures
+	Documents []*Document `json:"documents,omitempty"` // and files
+	Time      time.Time   `json:"time"`
 	// The tokens a reply took, as the provider told them: those it read,
 	// and those it wrote.
 	InputTokens  int `json:"input_tokens,omitempty"`

@@ -10,6 +10,8 @@ import (
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
+
+	"github.com/Qsnh/Murmur/extract"
 )
 
 // transcript is a chat to export, copied on the main thread to be written
@@ -24,6 +26,7 @@ type transcriptMessage struct {
 	role, content, reasoning, model, err string
 	thinkMS                              int64
 	images                               []imageSource
+	docs                                 []documentSource
 }
 
 // transcriptOf copies what of c an export writes.
@@ -37,17 +40,32 @@ func (a *app) transcriptOf(c *Chat) transcript {
 		for _, img := range m.Images {
 			tm.images = append(tm.images, a.store.source(img))
 		}
+		for _, doc := range m.Documents {
+			tm.docs = append(tm.docs, a.store.documentSource(doc))
+		}
 		t.messages = append(t.messages, tm)
 	}
 	return t
 }
 
-// write writes t as Markdown to the file at path, and its images, those
-// whose files are still there, into a folder beside it named after it, as
-// Typora keeps them: notes.md links notes.assets/1.png.
+// write writes t as Markdown to the file at path, and its images and the
+// text of its documents, those whose files are still there, into a folder
+// beside it named after it, as Typora keeps them: notes.md links
+// notes.assets/1.png and notes.assets/report.pdf.txt.
 func (t transcript) write(path string) error {
 	folder := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path)) + ".assets"
-	links := make([][]string, len(t.messages)) // "" for an image gone
+	links := make([][]string, len(t.messages))    // "" for an image gone
+	docLinks := make([][]string, len(t.messages)) // and a document
+	used := map[string]bool{}                     // the names in the folder, in lower case
+	put := func(name string, data []byte) (string, error) {
+		if len(used) == 0 {
+			if err := os.MkdirAll(filepath.Join(filepath.Dir(path), folder), 0o755); err != nil {
+				return "", err
+			}
+		}
+		used[strings.ToLower(name)] = true
+		return folder + "/" + name, os.WriteFile(filepath.Join(filepath.Dir(path), folder, name), data, 0o644)
+	}
 	n := 0
 	for i, m := range t.messages {
 		for _, src := range m.images {
@@ -56,26 +74,51 @@ func (t transcript) write(path string) error {
 				links[i] = append(links[i], "")
 				continue
 			}
-			if n == 0 {
-				if err := os.MkdirAll(filepath.Join(filepath.Dir(path), folder), 0o755); err != nil {
-					return err
-				}
-			}
 			n++
-			name := fmt.Sprintf("%d.%s", n, extension(src.mime))
-			if err := os.WriteFile(filepath.Join(filepath.Dir(path), folder, name), data, 0o644); err != nil {
+			link, err := put(fmt.Sprintf("%d.%s", n, extension(src.mime)), data)
+			if err != nil {
 				return err
 			}
-			links[i] = append(links[i], folder+"/"+name)
+			links[i] = append(links[i], link)
 		}
 	}
-	return os.WriteFile(path, []byte(t.markdown(links)), 0o644)
+	for i, m := range t.messages {
+		for _, src := range m.docs {
+			text, err := src.read()
+			if err != nil {
+				docLinks[i] = append(docLinks[i], "")
+				continue
+			}
+			link, err := put(documentAsset(src.name, used), []byte(text))
+			if err != nil {
+				return err
+			}
+			docLinks[i] = append(docLinks[i], link)
+		}
+	}
+	return os.WriteFile(path, []byte(t.markdown(links, docLinks)), 0o644)
+}
+
+// documentAsset returns the name of the file of the text of the document
+// named name, not one of used: its own for text, with .txt after it for
+// others, as report.pdf.txt.
+func documentAsset(name string, used map[string]bool) string {
+	base := fileName(name)
+	if extract.KindOf(name) != extract.Text || filepath.Ext(base) == "" {
+		base += ".txt"
+	}
+	out := base
+	for n := 2; used[strings.ToLower(out)]; n++ {
+		ext := filepath.Ext(base)
+		out = fmt.Sprintf("%s (%d)%s", strings.TrimSuffix(base, ext), n, ext)
+	}
+	return out
 }
 
 // markdown returns t as Markdown: the title, then each message under who
-// wrote it, the thinking and errors quoted, the images of message i linked
-// as links[i] says.
-func (t transcript) markdown(links [][]string) string {
+// wrote it, the thinking and errors quoted, the images and documents of
+// message i linked as links[i] and docLinks[i] say.
+func (t transcript) markdown(links, docLinks [][]string) string {
 	var b strings.Builder
 	title := strings.Join(strings.Fields(t.title), " ")
 	if title == "" {
@@ -86,7 +129,7 @@ func (t transcript) markdown(links [][]string) string {
 		b.WriteString("*" + t.start.Local().Format("2006-01-02 15:04") + " · Murmur*\n\n")
 	}
 	for i, m := range t.messages {
-		if m.content == "" && m.reasoning == "" && m.err == "" && len(m.images) == 0 {
+		if m.content == "" && m.reasoning == "" && m.err == "" && len(m.images) == 0 && len(m.docs) == 0 {
 			continue // a reply stopped before it came
 		}
 		who := "你"
@@ -103,6 +146,14 @@ func (t transcript) markdown(links [][]string) string {
 				label = "已思考 " + seconds(m.thinkMS)
 			}
 			quote(&b, "**"+label+"**\n\n"+r)
+		}
+		for j, l := range docLinks[i] {
+			name := markdownEscaper.Replace(m.docs[j].name)
+			if l == "" {
+				b.WriteString("*（文件已丢失：" + name + "）*\n\n")
+				continue
+			}
+			b.WriteString("附件：[" + name + "](<" + linkPath(l) + ">)\n\n")
 		}
 		for _, l := range links[i] {
 			if l == "" {
@@ -122,6 +173,10 @@ func (t transcript) markdown(links [][]string) string {
 	}
 	return strings.TrimRight(b.String(), "\n") + "\n"
 }
+
+// markdownEscaper escapes the characters Markdown takes for its marks, in
+// the text of a link.
+var markdownEscaper = strings.NewReplacer(`\`, `\\`, "[", `\[`, "]", `\]`, "*", `\*`, "_", `\_`, "`", "\\`")
 
 // linkPath returns path as the destination of a link in angle brackets,
 // where it may hold spaces: the characters a URL takes for others, as # for

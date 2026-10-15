@@ -25,11 +25,16 @@ type app struct {
 	draft    string  // what is typed in the composer
 	nextKey  int
 
-	pending   []*Image // the images attached to the message being written
-	attaching int      // how many attachments are being read
-	viewing   *Image   // the image shown large, if any
-	viewOpen  bool     // the image viewer shows
-	viewFull  *ui.Bitmap
+	pending     []*Image    // the images attached to the message being written
+	pendingDocs []*Document // and the documents
+	attaching   int         // how many attachments are being read
+	viewing     *Image      // the image shown large, if any
+	viewOpen    bool        // the image viewer shows
+	viewFull    *ui.Bitmap
+	reading     *Document // the document whose text shows, if any
+	readOpen    bool      // its text shows
+	readText    string    // what of it shows, once read
+	readLoaded  bool
 
 	collapsed bool // the sidebar is hidden
 	md        markdown.Options
@@ -62,9 +67,9 @@ type app struct {
 	stream func(ctx context.Context, cfg llm.Config, req llm.Request, emit func(llm.Event)) error
 	// applyTheme shows the app in an appearance; tests replace it.
 	applyTheme func(mygo.ThemeSource)
-	// openImages asks for images to attach, blocking until the user
-	// chooses; tests replace it.
-	openImages func() ([]string, error)
+	// openFiles asks for images and documents to attach, blocking until
+	// the user chooses; tests replace it.
+	openFiles func() ([]string, error)
 	// saveAs asks where to save a file, named name at first in dir,
 	// blocking until the user chooses, "" when canceled; tests replace it.
 	saveAs func(dir, name string) (string, error)
@@ -75,9 +80,10 @@ type app struct {
 
 func newApp(s store) *app {
 	a := &app{store: s, stream: llm.Stream, applyTheme: mygo.Theme.SetSource}
-	a.openImages, a.saveAs, a.notify = a.openImagesDialog, a.saveAsDialog, a.notifyDesktop
+	a.openFiles, a.saveAs, a.notify = a.openFilesDialog, a.saveAsDialog, a.notifyDesktop
 	a.settings = s.loadSettings()
 	a.chats = s.loadChats()
+	s.checkDocuments(a.chats)
 	for _, c := range a.chats {
 		for _, m := range c.Messages {
 			m.key = a.newKey()
@@ -122,14 +128,14 @@ func (a *app) spawn(fn func()) {
 	go fn()
 }
 
-// canSend reports whether text and the images attached make a message
-// to send: images still being read wait for the message.
+// canSend reports whether text and the images and documents attached make
+// a message to send: those still being read wait for the message.
 func (a *app) canSend(text string) bool {
-	return (strings.TrimSpace(text) != "" || len(a.pending) > 0) && a.attaching == 0
+	return (strings.TrimSpace(text) != "" || len(a.pending) > 0 || len(a.pendingDocs) > 0) && a.attaching == 0
 }
 
-// send sends text and the images attached in the current chat, starting
-// one if needed.
+// send sends text and the images and documents attached in the current
+// chat, starting one if needed.
 func (a *app) send(text string) {
 	text = strings.TrimSpace(text)
 	if !a.canSend(text) {
@@ -147,7 +153,11 @@ func (a *app) send(text string) {
 	}
 	if c == nil {
 		title := titleOf(text)
-		if title == "" {
+		switch {
+		case title != "":
+		case len(a.pendingDocs) > 0:
+			title = titleOf(a.pendingDocs[0].Name)
+		default:
 			title = "图片"
 		}
 		c = &Chat{ID: newID(), Title: title}
@@ -159,10 +169,15 @@ func (a *app) send(text string) {
 			a.toast = "保存图片失败：" + err.Error()
 		}
 	}
-	c.Messages = append(c.Messages, &Message{Role: "user", Content: text, Images: a.pending, Time: time.Now(), key: a.newKey()})
+	for _, doc := range a.pendingDocs {
+		if err := a.store.writeDocument(doc); err != nil {
+			a.toast = "保存文件失败：" + err.Error()
+		}
+	}
+	c.Messages = append(c.Messages, &Message{Role: "user", Content: text, Images: a.pending, Documents: a.pendingDocs, Time: time.Now(), key: a.newKey()})
 	c.Updated = time.Now()
 	a.saveChats() // what the user wrote outlives a reply cut short by quitting
-	a.draft, a.pending = "", nil
+	a.draft, a.pending, a.pendingDocs = "", nil, nil
 	a.reply(c, m)
 }
 
@@ -176,10 +191,12 @@ func titleOf(text string) string {
 	return text
 }
 
-// turn is a message to send, whose images are read off the main thread.
+// turn is a message to send, whose images and documents are read off the
+// main thread.
 type turn struct {
 	role, content string
 	images        []imageSource
+	docs          []documentSource
 }
 
 // reply asks m for the next message of c, and streams it in.
@@ -192,6 +209,9 @@ func (a *app) reply(c *Chat, m *Model) {
 		t := turn{role: msg.Role, content: msg.Content}
 		for _, img := range msg.Images {
 			t.images = append(t.images, a.store.source(img))
+		}
+		for _, doc := range msg.Documents {
+			t.docs = append(t.docs, a.store.documentSource(doc))
 		}
 		turns = append(turns, t)
 	}
@@ -254,7 +274,8 @@ func (a *app) reply(c *Chat, m *Model) {
 }
 
 // history returns the messages of turns to send, with the bytes of their
-// images; those whose files are gone are left out.
+// images and the text of their documents; those whose files are gone are
+// left out.
 func history(turns []turn) []llm.Message {
 	msgs := make([]llm.Message, 0, len(turns))
 	for _, t := range turns {
@@ -262,6 +283,11 @@ func history(turns []turn) []llm.Message {
 		for _, src := range t.images {
 			if data, err := src.read(); err == nil {
 				msg.Images = append(msg.Images, llm.Image{MIME: src.mime, Data: data})
+			}
+		}
+		for _, src := range t.docs {
+			if text, err := src.read(); err == nil {
+				msg.Documents = append(msg.Documents, llm.Document{Name: src.name, Text: sentText(src, text)})
 			}
 		}
 		msgs = append(msgs, msg)
@@ -353,7 +379,7 @@ func (a *app) deleteChat(id string) {
 		}
 		a.stop(c)
 		a.chats = append(a.chats[:i], a.chats[i+1:]...)
-		a.store.removeImages(c)
+		a.store.removeFiles(c)
 		if a.current == c {
 			a.newChat()
 		}

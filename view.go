@@ -77,6 +77,7 @@ func (a *app) view(c *ui.Context) {
 	a.settingsView(c)
 	a.renameDialog(c)
 	a.imageViewer(c)
+	a.documentViewer(c)
 	a.autosave()
 }
 
@@ -295,8 +296,8 @@ func groupChats(chats []*Chat, now time.Time) []chatGroup {
 }
 
 // pane is the chat shown, under a title bar whose title starts titleLeft
-// further right. Images dropped on it are attached to the message being
-// written.
+// further right. Images and documents dropped on it are attached to the
+// message being written.
 func (a *app) pane(c *ui.Context, titleLeft float32) {
 	t := c.Theme()
 	bar := c.TitleBar()
@@ -357,14 +358,22 @@ func (a *app) messages(c *ui.Context, ch *Chat) {
 	}).Grow(1).Padding(8, 24, 28, 24).Gap(28)
 }
 
-// message builds message i of ch: the user's in a bubble on the right, the
-// model's as Markdown under its thinking.
+// message builds message i of ch: the user's in a bubble on the right,
+// under its documents and images, the model's as Markdown under its
+// thinking.
 func (a *app) message(c *ui.Context, ch *Chat, i int) {
 	t := c.Theme()
 	m := ch.Messages[i]
 	col := ui.Column(c).FillWidth().MaxWidth(contentWidth).Margin(0, ui.Auto).Gap(8)
 	col.Children(func() {
 		if m.Role == "user" {
+			if len(m.Documents) > 0 {
+				ui.Row(c.Key("documents")).Wrap().Justify(ui.End).Gap(8).Children(func() {
+					for j, doc := range m.Documents {
+						a.documentCard(c.Key(j), doc)
+					}
+				})
+			}
 			if len(m.Images) > 0 {
 				ui.Row(c.Key("images")).Wrap().Justify(ui.End).Gap(8).Children(func() {
 					for j, img := range m.Images {
@@ -512,9 +521,9 @@ func thousands(n int) string {
 	return s
 }
 
-// composer is where the user writes, with the images attached above the
-// text and the model and thinking chosen below it. It shows that it takes
-// files dragged over the chat.
+// composer is where the user writes, with the documents and images
+// attached above the text and the model and thinking chosen below it. It
+// shows that it takes files dragged over the chat.
 func (a *app) composer(c *ui.Context, dragOver bool) {
 	t := c.Theme()
 	ch := a.current
@@ -529,7 +538,7 @@ func (a *app) composer(c *ui.Context, dragOver bool) {
 			box.Background(t.Accent.Alpha(0.06)).Border(1, t.Accent)
 		}
 		box.Children(func() {
-			if len(a.pending) > 0 || a.attaching > 0 {
+			if len(a.pending) > 0 || len(a.pendingDocs) > 0 || a.attaching > 0 {
 				a.attachments(c)
 			}
 			ui.TextAreaBase(c.Key("draft"), &a.draft).Lines(1, 10).Padding(4, 4, 4, 0).
@@ -556,7 +565,7 @@ func (a *app) composer(c *ui.Context, dragOver bool) {
 					return true
 				})
 			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-				iconButton(c.Key("attach"), imageIcon, "添加图片").OnClick(a.pickImages)
+				iconButton(c.Key("attach"), clipIcon, "添加图片或文件").OnClick(a.pickFiles)
 				a.modelPicker(c)
 				a.thinkToggle(c)
 				ui.Spacer(c)
@@ -581,11 +590,23 @@ func (a *app) composer(c *ui.Context, dragOver bool) {
 	})
 }
 
-// attachments are the images attached to the message being written, each
-// with a button that removes it, and those still being read.
+// attachments are the documents and images attached to the message being
+// written, each with a button that removes it, and those still being read.
 func (a *app) attachments(c *ui.Context) {
 	t := c.Theme()
-	ui.Row(c.Key("attachments")).Wrap().Gap(8).Padding(0, 0, 4, 0).Children(func() {
+	ui.Row(c.Key("attachments")).Wrap().Gap(8).Padding(0, 0, 4, 0).AlignItems(ui.Center).Children(func() {
+		for i, doc := range a.pendingDocs {
+			ui.Box(c.Key(doc.key)).Children(func() {
+				a.documentCard(c.Key("document"), doc).Padding(8, 34, 8, 8)
+				b := ui.ButtonBase(c.Key("remove")).Absolute().Top(18).Right(8).Size(20, 20).Radius(10).Center().
+					TextColor(t.TextMuted).Label("移除文件").Tooltip("移除")
+				if b.Hovered() {
+					b.Background(t.Border).TextColor(t.Text)
+				}
+				b.Children(func() { ui.Icon(c, closeIcon).Size(12, 12) })
+				b.OnClick(func() { a.detachDocument(i) })
+			})
+		}
 		for i, img := range a.pending {
 			ui.Box(c.Key(img)).Size(64, 64).Children(func() {
 				a.thumbnail(c.Key("image"), img, 64, 64)
@@ -692,21 +713,21 @@ func (a *app) imageViewer(c *ui.Context) {
 	})
 }
 
-// paste attaches the images a paste holds: a picture copied, as a
-// screenshot, or image files copied in Finder or Explorer. It reports
-// whether it took the paste, which text otherwise is.
+// paste attaches the images and documents a paste holds: a picture
+// copied, as a screenshot, or files copied in Finder or Explorer. It
+// reports whether it took the paste, which text otherwise is.
 func (a *app) paste(svc ui.Services, text string) bool {
 	formats := svc.ClipboardFormats()
 	if slices.Contains(formats, transfer.FileList) {
 		files, _ := svc.ReadClipboardData(transfer.FileList).Files()
-		var images []string
+		var attached []string
 		for _, f := range files {
-			if isImageFile(f) {
-				images = append(images, f)
+			if isImageFile(f) || isDocumentFile(f) {
+				attached = append(attached, f)
 			}
 		}
-		if len(images) > 0 {
-			a.attachFiles(images)
+		if len(attached) > 0 {
+			a.attachFiles(attached)
 			return true
 		}
 	}

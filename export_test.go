@@ -23,9 +23,16 @@ func TestExport(t *testing.T) {
 		}
 	}
 	gone := &Image{File: "gone.png", MIME: "image/png"}
+	docs := []*Document{{Name: "周报_v[2].pdf", text: "第一页"}, {Name: "notes.md", text: "# 待办"}, {Name: "notes.md", text: "另一份"}}
+	for _, doc := range docs {
+		if err := a.store.writeDocument(doc); err != nil {
+			t.Fatal(err)
+		}
+	}
+	docs = append(docs, &Document{Name: "gone.xlsx", File: "gone.txt"})
 	start := time.Date(2026, 10, 14, 9, 30, 0, 0, time.Local)
 	a.chats = []*Chat{{ID: "x", Title: "关于 a/b: 测试?", Updated: start, Messages: []*Message{
-		{Role: "user", Content: "看看这几张图", Images: []*Image{img1, img2, gone}, Time: start},
+		{Role: "user", Content: "看看这几张图", Images: []*Image{img1, img2, gone}, Documents: docs, Time: start},
 		{Role: "assistant", Content: "第一张是红蓝两色。\n", Reasoning: "先看第一张\n\n再看第二张", ThinkMS: 3200, Model: "GPT-5", Time: start},
 		{Role: "user", Content: "再说一次", Time: start},
 		{Role: "assistant", Error: "HTTP 401：Incorrect API key provided", Model: "GPT-5", Time: start},
@@ -62,6 +69,14 @@ func TestExport(t *testing.T) {
 *2026-10-14 09:30 · Murmur*
 
 ## 你
+
+附件：[周报\_v\[2\].pdf](<C%23 导出 1.assets/周报_v[2].pdf.txt>)
+
+附件：[notes.md](<C%23 导出 1.assets/notes.md>)
+
+附件：[notes.md](<C%23 导出 1.assets/notes (2).md>)
+
+*（文件已丢失：gone.xlsx）*
 
 ![图片](<C%23 导出 1.assets/1.png>)
 
@@ -109,7 +124,7 @@ func TestExport(t *testing.T) {
 	if string(b) != want {
 		t.Errorf("exported\n%s\nwant\n%s", b, want)
 	}
-	for name, data := range map[string][]byte{"1.png": png1, "2.jpg": jpg2} {
+	for name, data := range map[string][]byte{"1.png": png1, "2.jpg": jpg2, "周报_v[2].pdf.txt": []byte("第一页"), "notes.md": []byte("# 待办"), "notes (2).md": []byte("另一份")} {
 		if got, err := os.ReadFile(filepath.Join(dir, "C# 导出 1.assets", name)); err != nil || string(got) != string(data) {
 			t.Errorf("image %s: %d bytes, %v", name, len(got), err)
 		}

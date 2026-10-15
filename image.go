@@ -20,7 +20,6 @@ import (
 	xdraw "golang.org/x/image/draw"
 	_ "golang.org/x/image/webp"
 
-	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 )
 
@@ -41,8 +40,12 @@ const (
 	thumbSide = 600
 )
 
-// imageExtensions are the files the image picker shows.
+// imageExtensions are the images the file picker shows.
 var imageExtensions = []string{"png", "jpg", "jpeg", "gif", "webp", "bmp"}
+
+// otherImageExtensions are those of images not sent, which are said to be
+// so.
+var otherImageExtensions = []string{"heic", "heif", "avif", "tif", "tiff", "svg", "ico"}
 
 // mimeTypes are the formats image.Decode names that every provider takes,
 // and their MIME types: others, as BMP, are sent as PNG or JPEG.
@@ -122,20 +125,6 @@ func extension(mime string) string {
 		ext = "jpg"
 	}
 	return ext
-}
-
-// removeImages deletes the files of the images of c.
-func (s store) removeImages(c *Chat) {
-	if s.dir == "" {
-		return
-	}
-	for _, m := range c.Messages {
-		for _, img := range m.Images {
-			if img.File != "" {
-				os.Remove(s.imagePath(img.File))
-			}
-		}
-	}
 }
 
 // newImage makes an image of data fit to send: PNG, JPEG, GIF or WebP, no
@@ -229,32 +218,6 @@ func (a *app) loadThumb(img *Image) {
 	})
 }
 
-// attachFiles adds the images in the files at paths to the message being
-// written, made fit to send off the main thread, saying why those it
-// cannot take are left out.
-func (a *app) attachFiles(paths []string) {
-	if len(paths) == 0 {
-		return
-	}
-	a.attaching++
-	a.spawn(func() {
-		var imgs []*Image
-		var errs []string
-		for _, p := range paths {
-			img, err := readImage(p)
-			if err != nil {
-				errs = append(errs, filepath.Base(p)+"："+err.Error())
-				continue
-			}
-			imgs = append(imgs, img)
-		}
-		a.update(func() {
-			a.attaching--
-			a.attach(imgs, errs)
-		})
-	})
-}
-
 func readImage(path string) (*Image, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -287,22 +250,9 @@ func (a *app) attachData(data []byte) {
 		}
 		a.update(func() {
 			a.attaching--
-			a.attach(imgs, errs)
+			a.attach(imgs, nil, errs)
 		})
 	})
-}
-
-// attach adds imgs to the message being written, up to maxImages, and
-// says what was left out.
-func (a *app) attach(imgs []*Image, errs []string) {
-	if room := maxImages - len(a.pending); len(imgs) > room {
-		imgs = imgs[:max(room, 0)]
-		errs = append(errs, fmt.Sprintf("一条消息最多 %d 张图片", maxImages))
-	}
-	a.pending = append(a.pending, imgs...)
-	if len(errs) > 0 {
-		a.toast = "没有添加：" + strings.Join(errs, "；")
-	}
 }
 
 // detach removes image i from the message being written.
@@ -312,36 +262,11 @@ func (a *app) detach(i int) {
 	}
 }
 
-// pickImages asks for images to attach, in the system's dialog.
-func (a *app) pickImages() {
-	a.spawn(func() {
-		paths, err := a.openImages()
-		a.update(func() {
-			if err != nil {
-				a.toast = "无法打开文件选择框：" + err.Error()
-				return
-			}
-			a.attachFiles(paths)
-		})
-	})
-}
-
-// openImagesDialog shows the system's dialog to choose images; it blocks
-// until the dialog closes.
-func (a *app) openImagesDialog() ([]string, error) {
-	return mygo.Dialog.Open(mygo.OpenDialogOptions{
-		Parent:      a.win,
-		Title:       "选择图片",
-		ButtonLabel: "添加",
-		Filters:     []mygo.FileFilter{{Name: "图片", Extensions: imageExtensions}},
-		Multiple:    true,
-	})
-}
-
-// isImageFile reports whether the file at path is named as an image is.
+// isImageFile reports whether the file at path is named as an image is,
+// of a format sent or not.
 func isImageFile(path string) bool {
 	ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(path), "."))
-	return slices.Contains(imageExtensions, ext)
+	return slices.Contains(imageExtensions, ext) || slices.Contains(otherImageExtensions, ext)
 }
 
 // exifOrientation returns the EXIF orientation of a JPEG, 1 to 8, or 0
