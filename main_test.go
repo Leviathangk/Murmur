@@ -24,6 +24,7 @@ func testApp(t *testing.T) (*app, *[]llm.Request) {
 	t.Helper()
 	a := newApp(store{dir: t.TempDir()})
 	a.applyTheme = func(mygo.ThemeSource) {} // no app runs to take it
+	a.updates = &fakeUpdates{automaticChecks: true}
 	var reqs []llm.Request
 	a.stream = func(ctx context.Context, cfg llm.Config, req llm.Request, emit func(llm.Event)) error {
 		reqs = append(reqs, req)

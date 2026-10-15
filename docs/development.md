@@ -28,9 +28,11 @@ export.go     导出对话为 Markdown
 presets.go    服务商预设
 tray.go       托盘图标，关掉窗口后留在后台
 notify.go     回复完成时发系统通知，点通知打开对话
+update.go     检查、下载和安装新版本（MyGo 的更新窗口）
 llm/          模型调用：OpenAI 兼容（SSE）和 Anthropic（官方 SDK）
 extract/      读出 PDF、Word、Excel、PPT 和文本文件里的文字
 demo.go       演示构建（-tags demo），连本地模型自动跑一遍并截图
+CHANGELOG.md  各版本的更新说明，更新窗口里显示
 ```
 
 ## 深度思考的实现
@@ -99,7 +101,7 @@ Anthropic 协议用官方 Go SDK：Claude 4.6 及以后的模型用自适应思�
 
 - 窗口的 `OnClose` 拦下关闭，改为隐藏窗口；退出时（`OnBeforeQuit` 之后）不再拦，窗口照常关闭，进程退出
 - 托盘图标在 macOS 是菜单栏里的模板图（`resources/tray-macos.png`，黑色透明底，系统按菜单栏明暗着色），单击、右键都弹出菜单；在 Windows 是通知区域里的彩色应用图标（`resources/tray-windows.png`），单击打开窗口、右键弹出菜单，和那里的习惯一致
-- 菜单只有「打开 Murmur」和「退出 Murmur」：退出走 MyGo 的退出流程（`RoleQuit`），和 ⌘Q 一样
+- 菜单是「打开 Murmur」「检查更新…」和「退出 Murmur」：退出走 MyGo 的退出流程（`RoleQuit`），和 ⌘Q 一样
 - 窗口隐藏后，macOS 点程序坞图标（`OnActivate`）也会把窗口叫回来；最小化的窗口先还原再显示
 - macOS 全屏时直接隐藏会留下一个空白的全屏桌面，所以先退出全屏，等 `OnLeaveFullScreen` 再隐藏
 - 启动时 `RequestSingleInstanceLock`，再次启动的进程把命令行交给已经在运行的那个后退出，后者显示窗口（`OnSecondInstance`），不会出现两个托盘图标
@@ -115,6 +117,18 @@ Anthropic 协议用官方 Go SDK：Claude 4.6 及以后的模型用自适应思�
 - 窗口获得焦点（`OnFocus`）时调用 `mygo.ClearNotifications()`：回复已经在窗口里看到了，不再留在通知中心
 - macOS 只有打包的应用能发通知，`go tool mygo dev` 和 `mygo build` 出来的都是；直接 `go run .` 发不出，日志里会有 `no notification`
 - 开关存在 `settings.json` 的 `notify` 字段，没有这个字段的旧设置当作打开
+
+## 更新的实现
+
+用 MyGo 的签名更新（[文档](https://mygo.egoist.dev/docs/updates)）和它的原生 UI 更新窗口（`plugins/updater/native`），界面固定为简体中文：
+
+- `mygo.json` 的 `updates` 写着公钥和仓库 `Qsnh/Murmur`。`mygo build` 拿到私钥（环境变量 `MYGO_UPDATER_PRIVATE_KEY`）时，给每个平台的应用打一个签名的 `murmur-<版本>-<平台>.tar.gz`，从已发布的最近 3 个版本各做一个增量包（`.delta`，只含变化的部分，不比完整包小的不要），再写清单 `update-<平台>.json`：版本、`CHANGELOG.md` 里这个版本的说明、包的地址、大小和签名。平台是 `darwin-universal`、`windows-amd64`、`windows-arm64`
+- 应用读最新正式版 Release 里自己平台的清单（`releases/latest/download/update-<平台>.json`），版本更新就弹出更新窗口；预发布版本不算最新版，不会推给用户。下载后用编译进去的公钥验签，有当前版本的增量包就只下增量，失败了再下完整包；然后在应用旁边解包、替换（macOS 换整个 `.app`，Windows 把正在运行的 exe 改名挪开，下次启动时删掉），「立即重新启动」走正常的退出流程（`RoleQuit` 一样，单实例锁先释放）再启动新版本
+- 每天检查一次：到期的检查在启动 10 秒后做，失败了一小时后重试，电脑睡醒时补上。用户的选择（自动检查、自动下载安装、跳过的版本、上次检查时间）存在数据目录的 `updater.json`，设置页通过 `updater.AutomaticChecks` 等读写，更新窗口改了以后 `updater.OnChange` 让窗口重绘
+- 能写入安装位置才能更新（`mygo.Updater.Enabled`，它会在应用旁边试建目录；设置页用的结果在启动时到后台问一次记下来）：macOS 的 `/Applications`，Windows 安装程序装到的 `%LOCALAPPDATA%\Programs\Murmur`，或解压到用户自己目录的免安装版。在 DMG 里、被系统「App 转移」到只读位置运行的，或者不是管理员的账户打开 `/Applications` 里的，都不行；设置页说明原因，更新窗口的「无法更新」文案也换成了 Murmur 自己的说法
+- MyGo 用 `http.DefaultClient` 下载，`update.go` 给它换了一个按设置里的「网络代理」走的 Transport（`autosave` 把代理存进 `updateProxy`），没填时按环境变量
+- `go tool mygo dev` 和 `go run` 都是开发版本，不检查更新，点「检查更新」只会提示「开发版本不会自行更新」
+- 设置页、托盘菜单、macOS 应用菜单（「关于」后面）都有「检查更新」；macOS 的应用菜单因此改为 `SetMenu` 自己设，其余和 MyGo 默认的一样
 
 ## 打包
 
@@ -143,9 +157,28 @@ git push origin v0.2.0
 
 - 版本号以标签为准（去掉开头的 `v`），构建前写进 `mygo.json`，安装包文件名和设置页里显示的版本都跟着变，不用手动改
 - 标签带 `-` 的（如 `v0.2.0-beta.1`）发成预发布版本
-- 也可以先在 GitHub 网页上新建 Release 并创建标签，CI 会把安装包补传到这个 Release
+- 也可以先在 GitHub 网页上新建 Release 并创建标签，CI 会把安装包补传到这个 Release。但这样 CI 跑完前已安装的 Murmur 检查更新会出错，这个版本也做不出增量更新（构建时最新版已经是它自己），最好直接推标签
 - Release 附件：`Murmur-<版本>-macos-universal.dmg`、`Murmur-Setup-<版本>-windows-{amd64,arm64}.exe`、`Murmur-<版本>-windows-{amd64,arm64}-portable.zip`（免安装版）和 `SHA256SUMS.txt`
 - 在 Actions 页手动运行这个 workflow 只打包、不发布，安装包在运行记录的 Artifacts 里
+- 正式版本还会发布更新：用仓库 Secret `MYGO_UPDATER_PRIVATE_KEY` 签名，更新包（`murmur-<版本>-<平台>.tar.gz`、`.delta`）、清单 `update-<平台>.json` 和安装包都先传到草稿 Release，传完再发布，免得已安装的应用读到清单时包还没传完。没配这个 Secret 时正式版本的构建直接失败；预发布版本和在分支上手动运行不签名
+- **发版前先在 `CHANGELOG.md` 加上这个版本的说明**，标题写成 `## 0.8.0`，下面列给用户看的变化，更新窗口里显示的就是这段。没有的话测试（`TestChangelog`）失败，不会发布
+
+### 更新签名的密钥
+
+私钥在维护者电脑的 `~/Library/Application Support/mygo/update-keys/mygo-update.key`，公钥在 `mygo.json` 的 `updates.publicKey`。把私钥文件的内容填到 GitHub 仓库的 Settings → Secrets and variables → Actions → New repository secret，名称 `MYGO_UPDATER_PRIVATE_KEY`，或者：
+
+```sh
+gh secret set MYGO_UPDATER_PRIVATE_KEY < ~/Library/Application\ Support/mygo/update-keys/mygo-update.key
+```
+
+私钥另外备份到密码管理器里，不要提交到仓库：已安装的 Murmur 只认这把私钥签的更新，丢了就没法再推送更新，只能让用户手动下载；泄露了别人就能给所有用户推送代码。
+
+本地打一个带更新的包验证：
+
+```sh
+MYGO_UPDATER_PRIVATE_KEY="$(cat ~/Library/Application\ Support/mygo/update-keys/mygo-update.key)" \
+  go tool mygo build -platform darwin/universal,windows/amd64,windows/arm64
+```
 
 ## 签名
 

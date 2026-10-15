@@ -8,9 +8,11 @@ import (
 	_ "embed"
 	"encoding/json"
 	"log"
+	"runtime"
 
 	"github.com/egoist/mygo"
 	_ "github.com/egoist/mygo/locales/zh-Hans"
+	"github.com/egoist/mygo/plugins/updater"
 	"github.com/egoist/mygo/ui"
 )
 
@@ -49,6 +51,12 @@ func main() {
 	// A click on a notification shows its chat, also the click that
 	// launched the app (macOS), which comes before the window (notify.go).
 	mygo.App.OnNotificationClick(a.openNotified)
+	// Murmur checks for new versions and installs them (update.go); the
+	// app menu of macOS checks at once too.
+	a.updates = useUpdates(a.settings.Proxy)
+	if runtime.GOOS == "darwin" {
+		mygo.App.SetMenu(mygo.NewMenu(appMenu(a.updates.Check)))
+	}
 	mygo.App.WhenReady(func() {
 		a.win = mygo.NewWindow(mygo.WindowOptions{
 			Title:     "Murmur",
@@ -66,6 +74,8 @@ func main() {
 			Content:        ui.View(a.view),
 		})
 		a.stayInBackground()
+		// The settings show the choices made in the update window.
+		updater.OnChange(a.win.Invalidate)
 		// The window brought to the front shows what the notifications
 		// told: they do not wait in Notification Center.
 		a.win.OnFocus(mygo.ClearNotifications)

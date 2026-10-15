@@ -1,7 +1,14 @@
 # Pushing a tag such as v0.2.0 builds the installers of that version and
 # attaches them to its GitHub release: the workflow creates the release, or
-# fills the one published first with the tag. Run by hand, it builds the
-# version in mygo.json and keeps the packages as an artifact of the run.
+# fills the one published first with the tag. Run by hand on a branch, it
+# builds the version in mygo.json and keeps the packages as an artifact of
+# the run.
+#
+# A release also holds the updates that installed apps download: the app of
+# each platform, signed with the secret MYGO_UPDATER_PRIVATE_KEY whose
+# public key is in mygo.json, and its manifest, update-<platform>.json,
+# which the apps read from the latest release. Prereleases, which the apps
+# do not see, and runs on a branch make none.
 name: Release
 
 on:
@@ -17,6 +24,8 @@ jobs:
     # MyGo compiles every platform from a Mac, and only macOS makes the
     # disk image.
     runs-on: macos-latest
+    env:
+      UPDATES: ${{ github.ref_type == 'tag' && !contains(github.ref_name, '-') }}
     steps:
       - uses: actions/checkout@v7
 
@@ -41,26 +50,62 @@ jobs:
           jq --arg v "$version" '.version = $v' mygo.json > mygo.json.new
           mv mygo.json.new mygo.json
 
+      # Without the key the build would leave the updates out, and the
+      # installed apps would find none in the latest release.
+      - name: Check the key that signs updates
+        if: env.UPDATES == 'true'
+        env:
+          MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
+        run: |
+          if [ -z "$MYGO_UPDATER_PRIVATE_KEY" ]; then
+            echo "::error::Add the repository secret MYGO_UPDATER_PRIVATE_KEY, the key that signs updates (docs/development.md)"
+            exit 1
+          fi
+
+      # TestChangelog checks that CHANGELOG.md tells what is new in the
+      # version, which the update window shows.
       - name: Test
         run: go test ./...
 
+      # With the key, mygo build also signs the app of each platform, makes
+      # delta updates from the versions published before, and writes the
+      # manifests.
       - name: Build
+        env:
+          MYGO_UPDATER_PRIVATE_KEY: ${{ env.UPDATES == 'true' && secrets.MYGO_UPDATER_PRIVATE_KEY || '' }}
         run: go tool mygo build -platform darwin/universal,windows/amd64,windows/arm64
 
       # Names without spaces, which GitHub would turn into dots.
       - name: Collect the packages
         run: |
+          shopt -s nullglob
           version=$(jq -r .version mygo.json)
           echo "VERSION=$version" >> "$GITHUB_ENV"
-          mkdir dist
+          mkdir dist manifests
           cp "build/darwin-universal/Murmur $version.dmg" "dist/Murmur-$version-macos-universal.dmg"
           for arch in amd64 arm64; do
             cp "build/windows-$arch/Murmur Setup $version $arch.exe" "dist/Murmur-Setup-$version-windows-$arch.exe"
             # The portable app: what the installer installs.
-            (cd "build/windows-$arch" && zip -qr "../../dist/Murmur-$version-windows-$arch-portable.zip" . -x "Murmur Setup *")
+            (cd "build/windows-$arch" && zip -qr "../../dist/Murmur-$version-windows-$arch-portable.zip" . -x "Murmur Setup *" "*.tar.gz" "*.delta" "update-*.json")
           done
+          # The updates, under the names their manifests give them; the
+          # manifests apart, as they are published last.
+          for platform in darwin-universal windows-amd64 windows-arm64; do
+            for f in "build/$platform"/*.tar.gz "build/$platform"/*.delta; do
+              cp "$f" dist/
+            done
+            manifest="build/$platform/update-$platform.json"
+            if [ -e "$manifest" ]; then
+              cp "$manifest" manifests/
+            fi
+          done
+          made=(manifests/*)
+          if [ "$UPDATES" = true ] && [ ${#made[@]} -ne 3 ]; then
+            echo "::error::The build made no updates of some platforms"
+            exit 1
+          fi
           (cd dist && shasum -a 256 -- * > SHA256SUMS.txt)
-          ls -l dist
+          ls -l dist manifests
 
       - uses: actions/upload-artifact@v7
         with:
@@ -68,11 +113,24 @@ jobs:
           path: dist/*
           if-no-files-found: error
 
-      - name: Publish the release
+      # A draft until the manifests are there too: the installed apps read
+      # them from the latest release, then download what they name.
+      - name: Upload the packages
         if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v3
         with:
           files: dist/*
+          draft: true
           fail_on_unmatched_files: true
           generate_release_notes: true
           prerelease: ${{ contains(github.ref_name, '-') }}
+
+      - name: Publish the release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "$UPDATES" = true ]; then
+            gh release upload "$GITHUB_REF_NAME" manifests/* --clobber --repo "$GITHUB_REPOSITORY"
+          fi
+          gh release edit "$GITHUB_REF_NAME" --draft=false --repo "$GITHUB_REPOSITORY"

@@ -6,5 +6,9 @@
   "out": "build",
   "linux": {
     "comment": "A minimal AI chat"
+  },
+  "updates": {
+    "publicKey": "c+PuYQ4Ve332fkzf3uNGEezCr74U+WbXGpYQH5DMm9E=",
+    "github": "Qsnh/Murmur"
   }
 }

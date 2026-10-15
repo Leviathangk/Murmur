@@ -82,7 +82,8 @@ func (a *app) view(c *ui.Context) {
 }
 
 // autosave writes the settings when they changed, wherever they were
-// changed: the composer's model and thinking, or the settings dialog.
+// changed: the composer's model and thinking, or the settings dialog. The
+// updates go through the proxy of the settings from then on.
 func (a *app) autosave() {
 	b, err := json.Marshal(a.settings)
 	if err != nil || string(b) == a.savedSettings {
@@ -92,6 +93,7 @@ func (a *app) autosave() {
 		a.saveSettings()
 	}
 	a.savedSettings = string(b)
+	setUpdateProxy(a.settings.Proxy)
 }
 
 // iconButton returns a borderless button showing an icon, named by label.

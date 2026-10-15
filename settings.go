@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"slices"
+	"time"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
@@ -245,12 +246,13 @@ func (a *app) generalSettings(c *ui.Context) {
 				ui.Field(c, "通知", func() {
 					ui.Checkbox(c.Key("notify"), &a.settings.Notify, "回复完成时发送系统通知")
 				}).Description("Murmur 不在前台时才通知，点通知打开那个对话")
+				ui.Field(c, "更新", func() { a.updateSettings(c) }).Description(a.updatesDescription())
 				ui.Field(c, "系统提示词", func() {
 					ui.TextArea(c.Key("system"), &a.settings.SystemPrompt).Lines(4, 12).Placeholder("每次对话开始时发给模型的说明，比如：你是一个简洁的助手，用中文回答。")
 				})
 				ui.Field(c, "网络代理", func() {
 					ui.TextInput(c.Key("proxy"), &a.settings.Proxy).Placeholder("http://127.0.0.1:7890 或 socks5://127.0.0.1:1080")
-				}).Description("留空则直连；支持 http、https、socks5")
+				}).Description("留空则直连；支持 http、https、socks5。检查和下载更新也走这个代理")
 			})
 			where := a.store.dir
 			if where == "" {
@@ -262,6 +264,39 @@ func (a *app) generalSettings(c *ui.Context) {
 			})
 		})
 	})
+}
+
+// updateSettings turn the checks for updates and installing them without
+// asking on and off, and check at once.
+func (a *app) updateSettings(c *ui.Context) {
+	t := c.Theme()
+	u := a.updates
+	enabled := u.Enabled()
+	ui.Column(c).Gap(10).Children(func() {
+		auto := u.AutomaticChecks()
+		ui.Checkbox(c.Key("auto-check"), &auto, "自动检查更新").Disabled(!enabled).
+			OnChange(func() { u.SetAutomaticChecks(auto) })
+		install := u.AutomaticDownloads()
+		ui.Checkbox(c.Key("auto-install"), &install, "自动下载并安装新版本").Disabled(!enabled || !auto).
+			OnChange(func() { u.SetAutomaticDownloads(install) })
+		ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
+			ui.Button(c.Key("check"), "检查更新").OnClick(u.Check)
+			if s := checkedLabel(u.LastCheck(), time.Now()); s != "" && enabled {
+				ui.Text(c, s).FontSize(12).TextColor(t.TextMuted)
+			}
+		})
+	})
+}
+
+// updatesDescription says how Murmur updates, or why it cannot.
+func (a *app) updatesDescription() string {
+	switch {
+	case a.updates.Enabled():
+		return "每天检查一次，有新版本时告诉你更新了什么。自动安装的新版本在 Murmur 重新启动后生效"
+	case mygo.IsDev():
+		return "开发版本不会自动更新"
+	}
+	return "Murmur 没有权限写入它所在的文件夹，无法自动更新。在 macOS 上，请把 Murmur 拖进「应用程序」文件夹，再从那里打开；已经在里面的话，可能是当前账户不是管理员"
 }
 
 // option is a choice of a drop-down.

@@ -168,15 +168,26 @@ func normalize(msgs []Message) []Message {
 func httpClient(proxy string) (*http.Client, error) {
 	tr := http.DefaultTransport.(*http.Transport).Clone()
 	tr.ResponseHeaderTimeout = 3 * time.Minute
-	if proxy = strings.TrimSpace(proxy); proxy != "" {
-		if !strings.Contains(proxy, "://") {
-			proxy = "http://" + proxy
-		}
-		u, err := url.Parse(proxy)
-		if err != nil || u.Host == "" {
-			return nil, fmt.Errorf("代理地址无效：%s", proxy)
+	if strings.TrimSpace(proxy) != "" {
+		u, err := ProxyURL(proxy)
+		if err != nil {
+			return nil, err
 		}
 		tr.Proxy = http.ProxyURL(u)
 	}
 	return &http.Client{Transport: tr}, nil
+}
+
+// ProxyURL returns the URL of proxy, an http, https or socks5 URL, or a
+// host and port of an http proxy.
+func ProxyURL(proxy string) (*url.URL, error) {
+	proxy = strings.TrimSpace(proxy)
+	if !strings.Contains(proxy, "://") {
+		proxy = "http://" + proxy
+	}
+	u, err := url.Parse(proxy)
+	if err != nil || u.Host == "" {
+		return nil, fmt.Errorf("代理地址无效：%s", proxy)
+	}
+	return u, nil
 }

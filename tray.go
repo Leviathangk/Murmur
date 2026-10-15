@@ -23,10 +23,12 @@ var trayMacOS []byte
 //go:embed resources/tray-windows.png
 var trayWindows []byte
 
-// trayMenu is the menu of the tray icon: open the window, or quit.
-func trayMenu(open func()) []*mygo.MenuItem {
+// trayMenu is the menu of the tray icon: open the window, check for
+// updates, or quit.
+func trayMenu(open, check func()) []*mygo.MenuItem {
 	return []*mygo.MenuItem{
 		{Label: "打开 Murmur", Click: func(*mygo.MenuItem, *mygo.Window) { open() }},
+		checkMenuItem(check),
 		mygo.Separator(),
 		{Label: "退出 Murmur", Role: mygo.RoleQuit},
 	}
@@ -36,7 +38,7 @@ func trayMenu(open func()) []*mygo.MenuItem {
 // running when the window is closed. Without a tray, closing the window
 // quits as before, as nothing could open it again.
 func (a *app) stayInBackground() {
-	menu := mygo.NewMenu(trayMenu(a.showWindow))
+	menu := mygo.NewMenu(trayMenu(a.showWindow, a.updates.Check))
 	opts := mygo.TrayOptions{Icon: trayWindows, ToolTip: "Murmur", Menu: menu}
 	if runtime.GOOS == "darwin" {
 		opts.Icon, opts.IconIsTemplate = trayMacOS, true

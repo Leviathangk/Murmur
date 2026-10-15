@@ -76,6 +76,9 @@ type app struct {
 	// notify tells of a reply in a system notification, unless the window
 	// is in front; tests replace it.
 	notify func(mygo.NotificationOptions)
+	// updates checks for new versions of Murmur and installs them, once
+	// main sets it up; tests replace it.
+	updates updates
 }
 
 func newApp(s store) *app {

@@ -50,14 +50,21 @@ func TestTrayIcons(t *testing.T) {
 }
 
 func TestTrayMenu(t *testing.T) {
-	opened := false
-	items := trayMenu(func() { opened = true })
+	opened, checked := false, false
+	items := trayMenu(func() { opened = true }, func() { checked = true })
 	if items[0].Label != "打开 Murmur" {
 		t.Fatalf("first item %q", items[0].Label)
 	}
 	items[0].Click(items[0], nil)
 	if !opened {
 		t.Error("the window did not open")
+	}
+	if items[1].Label != "检查更新…" {
+		t.Fatalf("second item %q", items[1].Label)
+	}
+	items[1].Click(items[1], nil)
+	if !checked {
+		t.Error("no check for updates")
 	}
 	if last := items[len(items)-1]; last.Label != "退出 Murmur" || last.Role != mygo.RoleQuit {
 		t.Errorf("last item %+v, want quit", last)
