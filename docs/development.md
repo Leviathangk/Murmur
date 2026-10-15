@@ -24,6 +24,7 @@ image.go      图片：选择、粘贴、拖入，缩放和保存
 search.go     搜索对话
 export.go     导出对话为 Markdown
 presets.go    服务商预设
+tray.go       托盘图标，关掉窗口后留在后台
 llm/          模型调用：OpenAI 兼容（SSE）和 Anthropic（官方 SDK）
 demo.go       演示构建（-tags demo），连本地模型自动跑一遍并截图
 ```
@@ -62,6 +63,16 @@ Anthropic 协议用官方 Go SDK：Claude 4.6 及以后的模型用自适应思�
 - 图片按顺序编号复制到 `<文件名>.assets/`，链接用尖括号包住（路径里可以有空格），`#`、`?`、`%` 等会被当成 URL 语法的字符转义成 `%XX`；文件已丢失的图片写成「图片已丢失」
 - 用户消息在应用里按原文显示，导出时每行末尾加硬换行（代码块里不加），换行不会被合并；中途停止的回复如果停在代码块里，导出时补上结束的围栏，免得后面的内容都变成代码
 - Windows 的保存对话框不会自动补扩展名：不是 `.md` / `.markdown` 结尾时补上 `.md`，补完的文件已存在时再问一次是否替换；默认文件名避开 `CON`、`NUL` 等 Windows 保留名
+
+## 后台运行的实现
+
+- 窗口的 `OnClose` 拦下关闭，改为隐藏窗口；退出时（`OnBeforeQuit` 之后）不再拦，窗口照常关闭，进程退出
+- 托盘图标在 macOS 是菜单栏里的模板图（`resources/tray-macos.png`，黑色透明底，系统按菜单栏明暗着色），单击、右键都弹出菜单；在 Windows 是通知区域里的彩色应用图标（`resources/tray-windows.png`），单击打开窗口、右键弹出菜单，和那里的习惯一致
+- 菜单只有「打开 Murmur」和「退出 Murmur」：退出走 MyGo 的退出流程（`RoleQuit`），和 ⌘Q 一样
+- 窗口隐藏后，macOS 点程序坞图标（`OnActivate`）也会把窗口叫回来；最小化的窗口先还原再显示
+- macOS 全屏时直接隐藏会留下一个空白的全屏桌面，所以先退出全屏，等 `OnLeaveFullScreen` 再隐藏
+- 启动时 `RequestSingleInstanceLock`，再次启动的进程把命令行交给已经在运行的那个后退出，后者显示窗口（`OnSecondInstance`），不会出现两个托盘图标
+- 托盘创建失败时（如 Linux 没有 AppIndicator）不拦关闭，关掉窗口就退出，免得窗口再也打不开
 
 ## 打包
 

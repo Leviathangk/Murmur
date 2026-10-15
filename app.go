@@ -16,6 +16,7 @@ import (
 // app is the state the window shows.
 type app struct {
 	win      *mygo.Window
+	hiding   func() // stops the window leaving full screen from hiding then
 	store    store
 	settings *Settings
 	chats    []*Chat // the newest first

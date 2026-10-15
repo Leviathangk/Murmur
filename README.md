@@ -29,6 +29,7 @@ DeepSeek、通义千问、Kimi、智谱 GLM、豆包、硅基流动、Claude、G
 - 重命名、导出对话：右键侧边栏里的对话，或点对话右上角的「⋯」。导出为 Markdown 文件，图片一起导出到旁边的同名文件夹
 - 系统提示词，网络代理（http / https / socks5）
 - 原生界面，启动快；外观可选浅色、深色或跟随系统（设置 → 通用 → 外观）
+- 关掉窗口后留在后台：macOS 右上角菜单栏、Windows 右下角通知区域有 Murmur 图标，从这里重新打开窗口或退出
 
 **暂不支持**
 
@@ -54,6 +55,8 @@ DeepSeek、通义千问、Kimi、智谱 GLM、豆包、硅基流动、Claude、G
 - **macOS**：提示无法打开时，到「系统设置 → 隐私与安全性」，在页面下方点「仍要打开」。如果提示「已损坏」，在终端执行 `xattr -dr com.apple.quarantine /Applications/Murmur.app` 后再打开
 - **Windows**：SmartScreen 弹窗里点「更多信息」→「仍要运行」
 
+升级到新版本前，先退出正在运行的 Murmur（关掉窗口它还在后台）：macOS 点菜单栏里的 Murmur 图标，Windows 右键通知区域里的 Murmur 图标，选「退出 Murmur」，否则安装时会提示文件正在使用。
+
 ## 三步开始
 
 1. 打开 Murmur，点「添加模型」，选一个服务商，比如 DeepSeek
@@ -71,8 +74,18 @@ DeepSeek、通义千问、Kimi、智谱 GLM、豆包、硅基流动、Claude、G
 | 新对话 | ⌘N | Ctrl+N |
 | 搜索对话 | ⌘F | Ctrl+F |
 | 设置 | ⌘, | Ctrl+, |
+| 退出 | ⌘Q | 右键通知区域的 Murmur 图标 →「退出 Murmur」 |
 
 ## 常见问题
+
+**关掉窗口后 Murmur 还在运行？**
+
+是的，关掉窗口只是把它藏起来，Murmur 留在后台，下次打开不用重新加载。要彻底退出：
+
+- **macOS**：点右上角菜单栏里的 Murmur 图标 →「退出 Murmur」，或在 Murmur 里按 ⌘Q。点图标 →「打开 Murmur」或点程序坞里的图标，窗口就回来了
+- **Windows**：右键右下角通知区域里的 Murmur 图标 →「退出 Murmur」。单击图标打开窗口；图标被收进了「^」里的话，点开就能看到
+
+Murmur 同时只运行一个：再次从启动台、开始菜单或桌面打开它，会直接把已经在运行的窗口叫出来。
 
 **数据和 API Key 存在哪？**
 

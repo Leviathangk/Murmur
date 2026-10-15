@@ -34,6 +34,11 @@ func main() {
 	// The interface is in Chinese: MyGo's own controls and menus say
 	// theirs in Chinese too.
 	mygo.App.SetLanguages("zh-Hans")
+	// Murmur runs once: started again, as it stays running in the
+	// background, the running one shows its window (tray.go).
+	if !mygo.App.RequestSingleInstanceLock() {
+		return
+	}
 	dir, err := mygo.App.Path(mygo.PathUserData)
 	if err != nil {
 		log.Printf("no place for the data: %v", err)
@@ -57,6 +62,7 @@ func main() {
 			Vibrancy:       mygo.VibrancySidebar,
 			Content:        ui.View(a.view),
 		})
+		a.stayInBackground()
 		if onReady != nil {
 			onReady(a)
 		}
