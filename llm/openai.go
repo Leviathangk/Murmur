@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -99,12 +100,12 @@ type apiError struct {
 }
 
 func streamOpenAI(ctx context.Context, client *http.Client, cfg Config, req Request, emit func(Event)) error {
-	var msgs []map[string]string
+	var msgs []map[string]any
 	if s := strings.TrimSpace(req.System); s != "" {
-		msgs = append(msgs, map[string]string{"role": "system", "content": s})
+		msgs = append(msgs, map[string]any{"role": "system", "content": s})
 	}
 	for _, m := range req.Messages {
-		msgs = append(msgs, map[string]string{"role": m.Role, "content": m.Content})
+		msgs = append(msgs, map[string]any{"role": m.Role, "content": openAIContent(m)})
 	}
 	body := map[string]any{
 		"model":    strings.TrimSpace(cfg.Model),
@@ -180,6 +181,24 @@ func streamOpenAI(ctx context.Context, client *http.Client, cfg Config, req Requ
 		return err
 	}
 	return nil
+}
+
+// openAIContent returns the content of m: its text, or with images, a part
+// of its text and one of each image, as a data URL. A turn of text alone
+// stays a string, which every provider takes.
+func openAIContent(m Message) any {
+	if len(m.Images) == 0 {
+		return m.Content
+	}
+	var parts []map[string]any
+	if strings.TrimSpace(m.Content) != "" {
+		parts = append(parts, map[string]any{"type": "text", "text": m.Content})
+	}
+	for _, img := range m.Images {
+		url := "data:" + img.MIME + ";base64," + base64.StdEncoding.EncodeToString(img.Data)
+		parts = append(parts, map[string]any{"type": "image_url", "image_url": map[string]any{"url": url}})
+	}
+	return parts
 }
 
 // httpError reads the error a provider answered with.

@@ -7,6 +7,7 @@ tool github.com/egoist/mygo/cmd/mygo
 require (
 	github.com/anthropics/anthropic-sdk-go v1.81.0
 	github.com/egoist/mygo v0.5.1
+	golang.org/x/image v0.46.0
 )
 
 require (
@@ -28,7 +29,6 @@ require (
 	go.opentelemetry.io/otel/metric v1.33.0 // indirect
 	go.opentelemetry.io/otel/trace v1.33.0 // indirect
 	go.yaml.in/yaml/v4 v4.0.0-rc.2 // indirect
-	golang.org/x/image v0.46.0 // indirect
 	golang.org/x/sync v0.24.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
 )

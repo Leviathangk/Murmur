@@ -7,6 +7,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/markdown"
 
 	"github.com/Qsnh/Murmur/llm"
@@ -22,6 +23,12 @@ type app struct {
 	selected string  // the ID of the chat chosen in the sidebar
 	draft    string  // what is typed in the composer
 	nextKey  int
+
+	pending   []*Image // the images attached to the message being written
+	attaching int      // how many attachments are being read
+	viewing   *Image   // the image shown large, if any
+	viewOpen  bool     // the image viewer shows
+	viewFull  *ui.Bitmap
 
 	collapsed bool // the sidebar is hidden
 	md        markdown.Options
@@ -41,10 +48,14 @@ type app struct {
 	stream func(ctx context.Context, cfg llm.Config, req llm.Request, emit func(llm.Event)) error
 	// applyTheme shows the app in an appearance; tests replace it.
 	applyTheme func(mygo.ThemeSource)
+	// openImages asks for images to attach, blocking until the user
+	// chooses; tests replace it.
+	openImages func() ([]string, error)
 }
 
 func newApp(s store) *app {
 	a := &app{store: s, stream: llm.Stream, applyTheme: mygo.Theme.SetSource}
+	a.openImages = a.openImagesDialog
 	a.settings = s.loadSettings()
 	a.chats = s.loadChats()
 	for _, c := range a.chats {
@@ -91,10 +102,17 @@ func (a *app) spawn(fn func()) {
 	go fn()
 }
 
-// send sends text in the current chat, starting one if needed.
+// canSend reports whether text and the images attached make a message
+// to send: images still being read wait for the message.
+func (a *app) canSend(text string) bool {
+	return (strings.TrimSpace(text) != "" || len(a.pending) > 0) && a.attaching == 0
+}
+
+// send sends text and the images attached in the current chat, starting
+// one if needed.
 func (a *app) send(text string) {
 	text = strings.TrimSpace(text)
-	if text == "" {
+	if !a.canSend(text) {
 		return
 	}
 	m := a.model()
@@ -108,14 +126,23 @@ func (a *app) send(text string) {
 		return
 	}
 	if c == nil {
-		c = &Chat{ID: newID(), Title: titleOf(text)}
+		title := titleOf(text)
+		if title == "" {
+			title = "图片"
+		}
+		c = &Chat{ID: newID(), Title: title}
 		a.chats = append([]*Chat{c}, a.chats...)
 		a.current, a.selected = c, c.ID
 	}
-	c.Messages = append(c.Messages, &Message{Role: "user", Content: text, Time: time.Now(), key: a.newKey()})
+	for _, img := range a.pending {
+		if err := a.store.writeImage(img); err != nil {
+			a.toast = "保存图片失败：" + err.Error()
+		}
+	}
+	c.Messages = append(c.Messages, &Message{Role: "user", Content: text, Images: a.pending, Time: time.Now(), key: a.newKey()})
 	c.Updated = time.Now()
 	a.saveChats() // what the user wrote outlives a reply cut short by quitting
-	a.draft = ""
+	a.draft, a.pending = "", nil
 	a.reply(c, m)
 }
 
@@ -129,14 +156,24 @@ func titleOf(text string) string {
 	return text
 }
 
+// turn is a message to send, whose images are read off the main thread.
+type turn struct {
+	role, content string
+	images        []imageSource
+}
+
 // reply asks m for the next message of c, and streams it in.
 func (a *app) reply(c *Chat, m *Model) {
-	var history []llm.Message
+	var turns []turn
 	for _, msg := range c.Messages {
 		if msg.Error != "" {
 			continue
 		}
-		history = append(history, llm.Message{Role: msg.Role, Content: msg.Content})
+		t := turn{role: msg.Role, content: msg.Content}
+		for _, img := range msg.Images {
+			t.images = append(t.images, a.store.source(img))
+		}
+		turns = append(turns, t)
 	}
 	reply := &Message{Role: "assistant", Model: m.label(), Time: time.Now(), key: a.newKey(), streaming: true, thinkOpen: true}
 	c.Messages = append(c.Messages, reply)
@@ -147,8 +184,9 @@ func (a *app) reply(c *Chat, m *Model) {
 	ctx, cancel := context.WithCancel(context.Background())
 	c.cancel = cancel
 	cfg := m.config(a.settings.Proxy)
-	req := llm.Request{System: a.settings.SystemPrompt, Messages: history, Thinking: a.settings.Thinking}
+	req := llm.Request{System: a.settings.SystemPrompt, Thinking: a.settings.Thinking}
 	a.spawn(func() {
+		req.Messages = history(turns)
 		err := a.stream(ctx, cfg, req, func(e llm.Event) {
 			a.update(func() {
 				now := time.Now()
@@ -186,6 +224,22 @@ func (a *app) reply(c *Chat, m *Model) {
 			a.saveChats()
 		})
 	})
+}
+
+// history returns the messages of turns to send, with the bytes of their
+// images; those whose files are gone are left out.
+func history(turns []turn) []llm.Message {
+	msgs := make([]llm.Message, 0, len(turns))
+	for _, t := range turns {
+		msg := llm.Message{Role: t.role, Content: t.content}
+		for _, src := range t.images {
+			if data, err := src.read(); err == nil {
+				msg.Images = append(msg.Images, llm.Image{MIME: src.mime, Data: data})
+			}
+		}
+		msgs = append(msgs, msg)
+	}
+	return msgs
 }
 
 // stop stops the reply coming in c, keeping what came.
@@ -245,6 +299,7 @@ func (a *app) deleteChat(id string) {
 		}
 		a.stop(c)
 		a.chats = append(a.chats[:i], a.chats[i+1:]...)
+		a.store.removeImages(c)
 		if a.current == c {
 			a.newChat()
 		}

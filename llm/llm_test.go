@@ -91,15 +91,77 @@ func TestClaudeThinkingOf(t *testing.T) {
 
 func TestNormalize(t *testing.T) {
 	got := normalize([]Message{
-		{"assistant", "hi"},
-		{"user", "a"},
-		{"assistant", ""},
-		{"user", "b"},
-		{"assistant", "c"},
+		{Role: "assistant", Content: "hi"},
+		{Role: "user", Content: "a"},
+		{Role: "assistant", Content: ""},
+		{Role: "user", Content: "b"},
+		{Role: "assistant", Content: "c"},
 	})
-	want := []Message{{"user", "a\n\nb"}, {"assistant", "c"}}
+	want := []Message{{Role: "user", Content: "a\n\nb"}, {Role: "assistant", Content: "c"}}
 	if fmt.Sprint(got) != fmt.Sprint(want) {
 		t.Errorf("got %v, want %v", got, want)
+	}
+
+	// A turn of images alone is kept, and joins the next one's text and
+	// images without leaving the input changed.
+	a, b := Image{MIME: "image/png", Data: []byte("a")}, Image{MIME: "image/jpeg", Data: []byte("b")}
+	in := []Message{
+		{Role: "user", Images: []Image{a}},
+		{Role: "user", Content: "what", Images: []Image{b}},
+	}
+	got = normalize(in)
+	if len(got) != 1 || got[0].Content != "what" || len(got[0].Images) != 2 || got[0].Images[1].MIME != "image/jpeg" {
+		t.Errorf("images joined into %+v", got)
+	}
+	got[0].Images[0] = Image{MIME: "image/gif"}
+	if len(in[0].Images) != 1 || in[0].Images[0].MIME != "image/png" || len(in[1].Images) != 1 {
+		t.Errorf("the input changed: %+v", in)
+	}
+}
+
+// imageRequest is a turn of a picture and a question, and one of a
+// picture alone.
+var imageRequest = Request{Messages: []Message{
+	{Role: "user", Content: "what is it?", Images: []Image{{MIME: "image/png", Data: []byte("png")}}},
+	{Role: "assistant", Content: "a cat"},
+	{Role: "user", Images: []Image{{MIME: "image/jpeg", Data: []byte("jpg")}}},
+}}
+
+func TestOpenAIImages(t *testing.T) {
+	var body map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&body)
+		fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\ndata: [DONE]\n\n")
+	}))
+	defer srv.Close()
+	if _, _, err := collect(t, Config{BaseURL: srv.URL, Model: "m"}, imageRequest); err != nil {
+		t.Fatal(err)
+	}
+	msgs, _ := json.Marshal(body["messages"])
+	want := `[{"content":[{"text":"what is it?","type":"text"},{"image_url":{"url":"data:image/png;base64,cG5n"},"type":"image_url"}],"role":"user"},` +
+		`{"content":"a cat","role":"assistant"},` +
+		`{"content":[{"image_url":{"url":"data:image/jpeg;base64,anBn"},"type":"image_url"}],"role":"user"}]`
+	if string(msgs) != want {
+		t.Errorf("messages %s\nwant %s", msgs, want)
+	}
+}
+
+func TestAnthropicImages(t *testing.T) {
+	var body map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&body)
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n")
+	}))
+	defer srv.Close()
+	collect(t, Config{Protocol: Anthropic, BaseURL: srv.URL, APIKey: "ak", Model: "claude-opus-5"}, imageRequest)
+	msgs, _ := json.Marshal(body["messages"])
+	// The pictures go before the question, as Anthropic advises.
+	want := `[{"content":[{"source":{"data":"cG5n","media_type":"image/png","type":"base64"},"type":"image"},{"text":"what is it?","type":"text"}],"role":"user"},` +
+		`{"content":[{"text":"a cat","type":"text"}],"role":"assistant"},` +
+		`{"content":[{"source":{"data":"anBn","media_type":"image/jpeg","type":"base64"},"type":"image"}],"role":"user"}]`
+	if string(msgs) != want {
+		t.Errorf("messages %s\nwant %s", msgs, want)
 	}
 }
 
@@ -128,7 +190,7 @@ func TestOpenAIStream(t *testing.T) {
 	defer srv.Close()
 
 	cfg := Config{Protocol: OpenAI, BaseURL: srv.URL + "/v1/", APIKey: "sk-test", Model: "m", ThinkStyle: ThinkType}
-	r, x, err := collect(t, cfg, Request{System: "be brief", Messages: []Message{{"user", "hello"}}, Thinking: true})
+	r, x, err := collect(t, cfg, Request{System: "be brief", Messages: []Message{{Role: "user", Content: "hello"}}, Thinking: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,7 +209,7 @@ func TestOpenAIStream(t *testing.T) {
 	}
 
 	cfg.ThinkStyle = ThinkEnable
-	if _, _, err := collect(t, cfg, Request{Messages: []Message{{"user", "hello"}}}); err != nil {
+	if _, _, err := collect(t, cfg, Request{Messages: []Message{{Role: "user", Content: "hello"}}}); err != nil {
 		t.Fatal(err)
 	}
 	if body["enable_thinking"] != false {
@@ -161,7 +223,7 @@ func TestOpenAIError(t *testing.T) {
 		io.WriteString(w, `{"error":{"message":"Incorrect API key provided","type":"invalid_request_error"}}`)
 	}))
 	defer srv.Close()
-	_, _, err := collect(t, Config{BaseURL: srv.URL, Model: "m"}, Request{Messages: []Message{{"user", "hello"}}})
+	_, _, err := collect(t, Config{BaseURL: srv.URL, Model: "m"}, Request{Messages: []Message{{Role: "user", Content: "hello"}}})
 	if err == nil || !strings.Contains(err.Error(), "401") || !strings.Contains(err.Error(), "Incorrect API key") {
 		t.Errorf("error %v", err)
 	}
@@ -198,7 +260,7 @@ func TestAnthropicStream(t *testing.T) {
 	defer srv.Close()
 
 	cfg := Config{Protocol: Anthropic, BaseURL: srv.URL + "/v1", APIKey: "ak", Model: "claude-opus-5"}
-	r, x, err := collect(t, cfg, Request{System: "sys", Messages: []Message{{"user", "hi"}}, Thinking: true})
+	r, x, err := collect(t, cfg, Request{System: "sys", Messages: []Message{{Role: "user", Content: "hi"}}, Thinking: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -213,14 +275,14 @@ func TestAnthropicStream(t *testing.T) {
 	}
 
 	// Off: disabled on a model that thinks adaptively.
-	collect(t, cfg, Request{Messages: []Message{{"user", "hi"}}})
+	collect(t, cfg, Request{Messages: []Message{{Role: "user", Content: "hi"}}})
 	if th, _ := json.Marshal(body["thinking"]); string(th) != `{"type":"disabled"}` {
 		t.Errorf("thinking off %s", th)
 	}
 
 	// Models that cannot stop thinking think less instead.
 	cfg.Model = "claude-opus-5-5"
-	collect(t, cfg, Request{Messages: []Message{{"user", "hi"}}})
+	collect(t, cfg, Request{Messages: []Message{{Role: "user", Content: "hi"}}})
 	if _, ok := body["thinking"]; ok {
 		t.Errorf("thinking sent to a model that always thinks: %v", body["thinking"])
 	}
@@ -230,7 +292,7 @@ func TestAnthropicStream(t *testing.T) {
 
 	// Other providers' models take a budget.
 	cfg.Model = "deepseek-chat"
-	collect(t, cfg, Request{Messages: []Message{{"user", "hi"}}, Thinking: true})
+	collect(t, cfg, Request{Messages: []Message{{Role: "user", Content: "hi"}}, Thinking: true})
 	if th, _ := json.Marshal(body["thinking"]); string(th) != `{"budget_tokens":4096,"type":"enabled"}` {
 		t.Errorf("budget thinking %s", th)
 	}

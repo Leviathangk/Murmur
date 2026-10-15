@@ -3,9 +3,11 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
+	"github.com/egoist/mygo/transfer"
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/markdown"
 )
@@ -67,6 +69,7 @@ func (a *app) view(c *ui.Context) {
 	})
 
 	a.settingsView(c)
+	a.imageViewer(c)
 	a.autosave()
 }
 
@@ -183,11 +186,17 @@ func groupChats(chats []*Chat, now time.Time) []chatGroup {
 }
 
 // pane is the chat shown, under a title bar whose title starts titleLeft
-// further right.
+// further right. Images dropped on it are attached to the message being
+// written.
 func (a *app) pane(c *ui.Context, titleLeft float32) {
 	t := c.Theme()
 	bar := c.TitleBar()
-	ui.Column(c).Grow(1).MinWidth(0).Background(t.Background).Children(func() {
+	col := ui.Column(c).Grow(1).MinWidth(0).Background(t.Background)
+	if files := col.DroppedFiles(); files != nil {
+		a.attachFiles(files)
+	}
+	dragOver := col.FileDragOver()
+	col.Children(func() {
 		ui.Row(c).Height(titleBarHeight).Shrink(0).AlignItems(ui.Center).Padding(0, bar.Right+16, 0, 20+titleLeft).DragWindow().Children(func() {
 			title := "新对话"
 			if a.current != nil && a.current.Title != "" {
@@ -200,7 +209,7 @@ func (a *app) pane(c *ui.Context, titleLeft float32) {
 		} else {
 			a.welcome(c)
 		}
-		a.composer(c)
+		a.composer(c, dragOver)
 	})
 }
 
@@ -235,12 +244,22 @@ func (a *app) messages(c *ui.Context, ch *Chat) {
 func (a *app) message(c *ui.Context, ch *Chat, i int) {
 	t := c.Theme()
 	m := ch.Messages[i]
-	ui.Column(c).FillWidth().MaxWidth(contentWidth).Margin(0, ui.Auto).Children(func() {
+	ui.Column(c).FillWidth().MaxWidth(contentWidth).Margin(0, ui.Auto).Gap(8).Children(func() {
 		if m.Role == "user" {
-			ui.Row(c).Children(func() {
-				ui.Spacer(c)
-				ui.Text(c, m.Content).Selectable().LineHeight(1.5).Padding(10, 16).Radius(18).Background(t.Surface).MaxWidthPercent(80)
-			})
+			if len(m.Images) > 0 {
+				ui.Row(c.Key("images")).Wrap().Justify(ui.End).Gap(8).Children(func() {
+					for j, img := range m.Images {
+						w, h := shownSize(img, len(m.Images))
+						a.thumbnail(c.Key(j), img, w, h)
+					}
+				})
+			}
+			if m.Content != "" {
+				ui.Row(c).Children(func() {
+					ui.Spacer(c)
+					ui.Text(c, m.Content).Selectable().LineHeight(1.5).Padding(10, 16).Radius(18).Background(t.Surface).MaxWidthPercent(80)
+				})
+			}
 			return
 		}
 		ui.Column(c).Gap(10).Children(func() {
@@ -330,20 +349,29 @@ func (a *app) actions(c *ui.Context, ch *Chat, i int) {
 	})
 }
 
-// composer is where the user writes, with the model and thinking chosen
-// below the text.
-func (a *app) composer(c *ui.Context) {
+// composer is where the user writes, with the images attached above the
+// text and the model and thinking chosen below it. It shows that it takes
+// files dragged over the chat.
+func (a *app) composer(c *ui.Context, dragOver bool) {
 	t := c.Theme()
 	ch := a.current
 	busy := ch != nil && ch.busy()
+	svc := c.Services()
 	ui.Column(c).FillWidth().MaxWidth(contentWidth+48).Margin(0, ui.Auto).Padding(0, 24, 18, 24).Shrink(0).Children(func() {
 		box := ui.Column(c).Gap(6).Padding(12, 12, 8, 16).Radius(20).Background(t.Background).Border(1, t.Border)
 		if !t.Dark {
 			box.Shadow(0, 2, 12, 0, ui.RGBA(0, 0, 0, 0.05))
 		}
+		if dragOver {
+			box.Background(t.Accent.Alpha(0.06)).Border(1, t.Accent)
+		}
 		box.Children(func() {
+			if len(a.pending) > 0 || a.attaching > 0 {
+				a.attachments(c)
+			}
 			ui.TextAreaBase(c.Key("draft"), &a.draft).Lines(1, 10).Padding(4, 4, 4, 0).
 				Placeholder("给 Murmur 发消息，Enter 发送，Shift+Enter 换行").Label("消息").AutoFocus().
+				OnPaste(func(text string) bool { return a.paste(svc, text) }).
 				OnTextKey(func(k ui.TextKey) bool {
 					if k.Key != ui.KeyEnter || k.Mods != 0 {
 						return false // Shift+Enter breaks the line
@@ -352,7 +380,7 @@ func (a *app) composer(c *ui.Context) {
 						return true
 					}
 					text := k.Text()
-					if strings.TrimSpace(text) == "" {
+					if !a.canSend(text) {
 						return true
 					}
 					if a.model() == nil {
@@ -365,6 +393,7 @@ func (a *app) composer(c *ui.Context) {
 					return true
 				})
 			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
+				iconButton(c.Key("attach"), imageIcon, "添加图片").OnClick(a.pickImages)
 				a.modelPicker(c)
 				a.thinkToggle(c)
 				ui.Spacer(c)
@@ -375,7 +404,7 @@ func (a *app) composer(c *ui.Context) {
 					b.OnClick(func() { a.stop(ch) })
 					return
 				}
-				empty := strings.TrimSpace(a.draft) == ""
+				empty := !a.canSend(a.draft)
 				if empty {
 					b.Background(t.SurfaceHover).TextColor(t.TextMuted)
 				} else {
@@ -387,6 +416,146 @@ func (a *app) composer(c *ui.Context) {
 			})
 		})
 	})
+}
+
+// attachments are the images attached to the message being written, each
+// with a button that removes it, and those still being read.
+func (a *app) attachments(c *ui.Context) {
+	t := c.Theme()
+	ui.Row(c.Key("attachments")).Wrap().Gap(8).Padding(0, 0, 4, 0).Children(func() {
+		for i, img := range a.pending {
+			ui.Box(c.Key(img)).Size(64, 64).Children(func() {
+				a.thumbnail(c.Key("image"), img, 64, 64)
+				b := ui.ButtonBase(c.Key("remove")).Absolute().Top(4).Right(4).Size(20, 20).Radius(10).Center().
+					Background(ui.RGBA(0, 0, 0, 0.6)).TextColor(ui.RGB(255, 255, 255)).Label("移除图片").Tooltip("移除")
+				if b.Hovered() {
+					b.Background(ui.RGBA(0, 0, 0, 0.8))
+				}
+				b.Children(func() { ui.Icon(c, closeIcon).Size(12, 12) })
+				b.OnClick(func() { a.detach(i) })
+			})
+		}
+		if a.attaching > 0 {
+			ui.Box(c.Key("attaching")).Size(64, 64).Radius(10).Background(t.Surface).Center().Children(func() {
+				ui.Spinner(c).Size(16, 16)
+			})
+		}
+	})
+}
+
+// shownSize returns the size img shows at in a message of n images: one
+// alone keeps its shape, several show as squares.
+func shownSize(img *Image, n int) (float32, float32) {
+	const side = 280
+	if n > 1 {
+		return 120, 120
+	}
+	if img.W <= 0 || img.H <= 0 {
+		return 200, 200
+	}
+	scale := min(1, side/float32(max(img.W, img.H)))
+	return max(float32(img.W)*scale, 48), max(float32(img.H)*scale, 48)
+}
+
+// thumbnail shows img at w×h, cropped to fill it, and large when clicked.
+func (a *app) thumbnail(c *ui.Context, img *Image, w, h float32) {
+	t := c.Theme()
+	b := ui.ButtonBase(c).Size(w, h).Radius(10).Background(t.Surface).Center().Label("查看图片")
+	b.Children(func() {
+		switch {
+		case img.thumb != nil:
+			ui.Image(c, img.thumb).Size(w, h).Fit(ui.Cover).Radius(10)
+		case img.missing:
+			ui.Icon(c, noImageIcon).Size(20, 20).TextColor(t.TextMuted)
+		default:
+			if !img.loading {
+				a.loadThumb(img)
+			}
+			ui.Spinner(c).Size(16, 16)
+		}
+	})
+	if img.missing {
+		b.Label("图片已丢失").Tooltip("图片文件已不存在")
+		return
+	}
+	b.OnClick(func() { a.showImage(img) })
+}
+
+// showImage shows img large, over the window, read in full off the main
+// thread: its thumbnail shows until then.
+func (a *app) showImage(img *Image) {
+	a.viewing, a.viewOpen, a.viewFull = img, true, nil
+	src := a.store.source(img)
+	a.spawn(func() {
+		var full *ui.Bitmap
+		data, err := src.read()
+		if err == nil {
+			full, _ = ui.DecodeBitmap(data)
+		}
+		a.update(func() {
+			if a.viewing == img && full != nil {
+				a.viewFull = full
+			}
+		})
+	})
+}
+
+// imageViewer is the image shown large, which a click or Escape closes.
+func (a *app) imageViewer(c *ui.Context) {
+	ui.DialogBase(c.Key("viewer"), &a.viewOpen, func(backdrop, panel ui.Element) {
+		backdrop.Background(ui.RGBA(0, 0, 0, 0.8))
+		img := a.viewing
+		if img == nil {
+			return
+		}
+		bm := a.viewFull
+		if bm == nil {
+			bm = img.thumb
+		}
+		if bm == nil {
+			ui.Spinner(c).Size(20, 20)
+			return
+		}
+		w, h := float32(img.W), float32(img.H)
+		if w <= 0 || h <= 0 {
+			pw, ph := bm.Size()
+			w, h = float32(pw), float32(ph)
+		}
+		ww, wh := c.Size()
+		scale := min(1, (ww-64)/w, (wh-64)/h)
+		b := ui.ButtonBase(c.Key("image")).Label("关闭图片")
+		b.Children(func() { ui.Image(c, bm).Size(w*scale, h*scale).Radius(6) })
+		b.OnClick(func() { a.viewOpen = false })
+	})
+}
+
+// paste attaches the images a paste holds: a picture copied, as a
+// screenshot, or image files copied in Finder or Explorer. It reports
+// whether it took the paste, which text otherwise is.
+func (a *app) paste(svc ui.Services, text string) bool {
+	formats := svc.ClipboardFormats()
+	if slices.Contains(formats, transfer.FileList) {
+		files, _ := svc.ReadClipboardData(transfer.FileList).Files()
+		var images []string
+		for _, f := range files {
+			if isImageFile(f) {
+				images = append(images, f)
+			}
+		}
+		if len(images) > 0 {
+			a.attachFiles(images)
+			return true
+		}
+	}
+	// A text copied with a picture of it, as cells of a spreadsheet, is
+	// pasted as text.
+	if text == "" && slices.Contains(formats, transfer.PNG) {
+		if data, err := svc.ReadClipboardData(transfer.PNG).Read(transfer.PNG); err == nil && len(data) > 0 {
+			a.attachData(data)
+			return true
+		}
+	}
+	return false
 }
 
 // modelPicker chooses the model chats use.

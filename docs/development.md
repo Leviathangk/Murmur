@@ -20,6 +20,7 @@ app.go        应用状态：发送、流式接收、停止、重新生成
 view.go       主界面：侧边栏、消息列表、输入框
 settings.go   设置面板：模型管理、系统提示词、代理
 store.go      设置和对话的读写
+image.go      图片：选择、粘贴、拖入，缩放和保存
 presets.go    服务商预设
 llm/          模型调用：OpenAI 兼容（SSE）和 Anthropic（官方 SDK）
 demo.go       演示构建（-tags demo），连本地模型自动跑一遍并截图
@@ -40,6 +41,14 @@ OpenAI 兼容协议下，各家打开思考的方式不一样。「思考参数�
 思考内容从响应的 `reasoning_content` / `reasoning` 字段读取，模型如果把思考写在正文的 `<think>…</think>` 里也会被识别出来。
 
 Anthropic 协议用官方 Go SDK：Claude 4.6 及以后的模型用自适应思考（`{"type": "adaptive", "display": "summarized"}`，思考摘要实时显示），更早的 Claude 和其他兼容 Anthropic 协议的服务用思考预算（`budget_tokens`）。
+
+## 图片的实现
+
+- 选择（系统文件对话框）、拖入对话区、粘贴（截图，或在访达 / 资源管理器里复制的图片文件）三种方式添加，读取和缩放都在后台 goroutine 里做
+- 发送前统一处理：长边超过 2048 像素、超过 3 MB、带 EXIF 旋转的 JPEG，或 BMP 等不是各家都收的格式，重新绘制后编码成 JPEG（有透明的编码成 PNG）；其余原样发送
+- 图片存在数据目录的 `images/` 下，每张一个文件，`chats.json` 里只记文件名、MIME 类型和尺寸，免得每次保存对话都重写几 MB；删除对话时一起删除，文件丢失时显示「图片已丢失」并且不再发送
+- OpenAI 兼容协议把带图的消息写成 `content` 数组：文字一段，每张图一段 `image_url`（`data:` URL）；纯文字消息仍然是字符串，兼容不认数组的服务商
+- Anthropic 协议每张图一个 base64 `image` 块，放在文字前面
 
 ## 打包
 

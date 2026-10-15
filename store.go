@@ -82,6 +82,7 @@ type Message struct {
 	ThinkMS   int64     `json:"think_ms,omitempty"` // how long the model thought
 	Model     string    `json:"model,omitempty"`    // the name of the model that replied
 	Error     string    `json:"error,omitempty"`
+	Images    []*Image  `json:"images,omitempty"` // the user's pictures
 	Time      time.Time `json:"time"`
 
 	key        int       // identifies the message in the list

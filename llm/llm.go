@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 )
@@ -52,6 +53,14 @@ type Config struct {
 type Message struct {
 	Role    string
 	Content string
+	Images  []Image // the pictures of a user's turn
+}
+
+// Image is a picture the model looks at: PNG, JPEG, GIF or WebP data, of
+// its MIME type.
+type Image struct {
+	MIME string
+	Data []byte
 }
 
 // Request is what to send: the system prompt, the conversation, and
@@ -97,11 +106,18 @@ func Stream(ctx context.Context, cfg Config, req Request, emit func(Event)) erro
 func normalize(msgs []Message) []Message {
 	var out []Message
 	for _, m := range msgs {
-		if strings.TrimSpace(m.Content) == "" {
+		if strings.TrimSpace(m.Content) == "" && len(m.Images) == 0 {
 			continue
 		}
 		if n := len(out); n > 0 && out[n-1].Role == m.Role {
-			out[n-1].Content += "\n\n" + m.Content
+			prev := &out[n-1]
+			switch {
+			case strings.TrimSpace(prev.Content) == "":
+				prev.Content = m.Content
+			case strings.TrimSpace(m.Content) != "":
+				prev.Content += "\n\n" + m.Content
+			}
+			prev.Images = slices.Concat(prev.Images, m.Images)
 			continue
 		}
 		out = append(out, m)

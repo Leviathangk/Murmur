@@ -2,6 +2,7 @@ package llm
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -84,11 +85,19 @@ func streamAnthropic(ctx context.Context, client *http.Client, cfg Config, req R
 		params.System = []anthropic.TextBlockParam{{Text: s}}
 	}
 	for _, m := range req.Messages {
-		block := anthropic.NewTextBlock(m.Content)
+		// The pictures go before the text, as Anthropic advises; a text
+		// block may not be blank.
+		var blocks []anthropic.ContentBlockParamUnion
+		for _, img := range m.Images {
+			blocks = append(blocks, anthropic.NewImageBlockBase64(img.MIME, base64.StdEncoding.EncodeToString(img.Data)))
+		}
+		if strings.TrimSpace(m.Content) != "" || len(blocks) == 0 {
+			blocks = append(blocks, anthropic.NewTextBlock(m.Content))
+		}
 		if m.Role == "assistant" {
-			params.Messages = append(params.Messages, anthropic.NewAssistantMessage(block))
+			params.Messages = append(params.Messages, anthropic.NewAssistantMessage(blocks...))
 		} else {
-			params.Messages = append(params.Messages, anthropic.NewUserMessage(block))
+			params.Messages = append(params.Messages, anthropic.NewUserMessage(blocks...))
 		}
 	}
 
