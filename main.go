@@ -5,6 +5,8 @@
 package main
 
 import (
+	_ "embed"
+	"encoding/json"
 	"log"
 
 	"github.com/egoist/mygo"
@@ -12,7 +14,17 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-const version = "0.1.0"
+// mygoJSON is the app's configuration, whose version is the app's: the
+// release workflow sets it from the tag, as the packages are named after it.
+//
+//go:embed mygo.json
+var mygoJSON []byte
+
+var version = func() string {
+	var c struct{ Version string }
+	json.Unmarshal(mygoJSON, &c)
+	return c.Version
+}()
 
 // onReady, when set, runs once the window shows, as the demo build drives
 // the app (demo.go).

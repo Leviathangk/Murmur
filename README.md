@@ -70,6 +70,21 @@ go tool mygo build -platform darwin/universal,windows/amd64,windows/arm64
 
 生成 Windows 安装程序需要 NSIS（`brew install makensis`），没装的话只会输出免安装的 `Murmur.exe`。
 
+### 发布版本
+
+推一个版本标签，GitHub Actions（`.github/workflows/release.yml`）会跑测试、打包，并把安装包挂到同名的 GitHub Release 上：
+
+```sh
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+- 版本号以标签为准（去掉开头的 `v`），构建前写进 `mygo.json`，安装包文件名和设置页里显示的版本都跟着变，不用手动改
+- 标签带 `-` 的（如 `v0.2.0-beta.1`）发成预发布版本
+- 也可以先在 GitHub 网页上新建 Release 并创建标签，CI 会把安装包补传到这个 Release
+- Release 附件：`Murmur-<版本>-macos-universal.dmg`、`Murmur-Setup-<版本>-windows-{amd64,arm64}.exe`、`Murmur-<版本>-windows-{amd64,arm64}-portable.zip`（免安装版）和 `SHA256SUMS.txt`
+- 在 Actions 页手动运行这个 workflow 只打包、不发布，安装包在运行记录的 Artifacts 里
+
 ### 关于签名
 
 现在的包没有正式签名（macOS 是 ad-hoc 签名）：

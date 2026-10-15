@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"image/png"
 	"os"
@@ -301,5 +302,21 @@ func TestGroupChats(t *testing.T) {
 	}
 	if strings.Join(got, " ") != "今天:a 昨天:b 7 天内:c 更早:d" {
 		t.Errorf("groups %q", got)
+	}
+}
+
+// The version shown is mygo.json's, which the release workflow sets from
+// the tag, as the packages are named after it.
+func TestVersionFromConfig(t *testing.T) {
+	b, err := os.ReadFile("mygo.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var c struct{ Version string }
+	if err := json.Unmarshal(b, &c); err != nil {
+		t.Fatal(err)
+	}
+	if c.Version == "" || version != c.Version {
+		t.Errorf("version %q, mygo.json says %q", version, c.Version)
 	}
 }
