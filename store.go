@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 
 	"github.com/Qsnh/Murmur/llm"
@@ -59,6 +60,8 @@ type Settings struct {
 	Thinking     bool     `json:"thinking"`
 	SystemPrompt string   `json:"system_prompt"`
 	Proxy        string   `json:"proxy"`
+	// Theme is the appearance chosen; empty follows the system.
+	Theme mygo.ThemeSource `json:"theme,omitempty"`
 }
 
 // model returns the model of the given ID, or nil.

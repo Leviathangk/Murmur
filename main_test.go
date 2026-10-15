@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 
 	"github.com/Qsnh/Murmur/llm"
@@ -21,6 +22,7 @@ import (
 func testApp(t *testing.T) (*app, *[]llm.Request) {
 	t.Helper()
 	a := newApp(store{dir: t.TempDir()})
+	a.applyTheme = func(mygo.ThemeSource) {} // no app runs to take it
 	var reqs []llm.Request
 	a.stream = func(ctx context.Context, cfg llm.Config, req llm.Request, emit func(llm.Event)) error {
 		reqs = append(reqs, req)
@@ -254,6 +256,39 @@ func TestEditModel(t *testing.T) {
 	tt.Frame()
 	if b := newApp(a.store); b.settings.Models[0].Model != "my-model" || b.settings.Models[0].MaxTokens != 4096 {
 		t.Errorf("saved %+v", b.settings.Models[0])
+	}
+}
+
+func TestTheme(t *testing.T) {
+	a, _ := testApp(t)
+	var applied []mygo.ThemeSource
+	a.applyTheme = func(s mygo.ThemeSource) { applied = append(applied, s) }
+	tt := ui.NewTester(a.view, 1080, 720)
+	a.openSettings()
+	tt.Frame()
+	if err := tt.Click("通用"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if err := tt.Click("深色"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.settings.Theme != mygo.ThemeDark || len(applied) != 1 || applied[0] != mygo.ThemeDark {
+		t.Fatalf("theme %q, applied %q", a.settings.Theme, applied)
+	}
+	tt.SetDark(true) // as the window follows the theme applied
+	snapshot(t, tt, "settings-dark")
+	if b := newApp(a.store); b.settings.Theme != mygo.ThemeDark {
+		t.Errorf("saved theme %q", b.settings.Theme)
+	}
+
+	if err := tt.Click("跟随系统"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.settings.Theme != mygo.ThemeSystem || len(applied) != 2 || applied[1] != mygo.ThemeSystem {
+		t.Errorf("theme %q, applied %q", a.settings.Theme, applied)
 	}
 }
 

@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"slices"
 
+	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 
 	"github.com/Qsnh/Murmur/llm"
@@ -225,12 +227,21 @@ func (a *app) test(m *Model) {
 	})
 }
 
+// themes are the appearances to choose from, in the order the settings
+// show them.
+var themes = []mygo.ThemeSource{mygo.ThemeSystem, mygo.ThemeLight, mygo.ThemeDark}
+
 // generalSettings are the preferences of every chat.
 func (a *app) generalSettings(c *ui.Context) {
 	t := c.Theme()
 	ui.Scroll(c).Grow(1).Children(func() {
 		ui.Column(c).Padding(20, 24, 24, 24).Gap(16).Children(func() {
 			ui.Form(c, func() {
+				ui.Field(c, "外观", func() {
+					i := max(slices.Index(themes, a.settings.Theme), 0) // empty follows the system
+					ui.Segmented(c.Key("theme"), &i, "跟随系统", "浅色", "深色").Label("外观").AlignSelf(ui.Start).
+						OnChange(func() { a.setTheme(themes[i]) })
+				})
 				ui.Field(c, "系统提示词", func() {
 					ui.TextArea(c.Key("system"), &a.settings.SystemPrompt).Lines(4, 12).Placeholder("每次对话开始时发给模型的说明，比如：你是一个简洁的助手，用中文回答。")
 				})

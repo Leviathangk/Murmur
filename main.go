@@ -39,6 +39,8 @@ func main() {
 		log.Printf("no place for the data: %v", err)
 	}
 	a := newApp(store{dir: dir})
+	// The app starts in the appearance chosen last.
+	mygo.Theme.SetSource(a.settings.Theme)
 	mygo.App.WhenReady(func() {
 		a.win = mygo.NewWindow(mygo.WindowOptions{
 			Title:     "Murmur",

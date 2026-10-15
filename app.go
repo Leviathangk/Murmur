@@ -39,10 +39,12 @@ type app struct {
 
 	// stream calls the model; tests replace it.
 	stream func(ctx context.Context, cfg llm.Config, req llm.Request, emit func(llm.Event)) error
+	// applyTheme shows the app in an appearance; tests replace it.
+	applyTheme func(mygo.ThemeSource)
 }
 
 func newApp(s store) *app {
-	a := &app{store: s, stream: llm.Stream}
+	a := &app{store: s, stream: llm.Stream, applyTheme: mygo.Theme.SetSource}
 	a.settings = s.loadSettings()
 	a.chats = s.loadChats()
 	for _, c := range a.chats {
@@ -261,6 +263,12 @@ func (a *app) saveSettings() {
 	if err := a.store.write("settings.json", a.settings); err != nil {
 		a.toast = "保存设置失败：" + err.Error()
 	}
+}
+
+// setTheme shows the app in s from now on, as the next start will.
+func (a *app) setTheme(s mygo.ThemeSource) {
+	a.settings.Theme = s
+	a.applyTheme(s)
 }
 
 // openSettings shows the settings, on the model chats use.
