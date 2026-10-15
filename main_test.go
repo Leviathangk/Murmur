@@ -355,3 +355,69 @@ func TestVersionFromConfig(t *testing.T) {
 		t.Errorf("version %q, mygo.json says %q", version, c.Version)
 	}
 }
+
+func TestRename(t *testing.T) {
+	a, _ := testApp(t)
+	a.chats = testChats()
+	updated := a.chats[1].Updated
+	tt := ui.NewTester(a.view, 1080, 720)
+
+	// From the menu of a chat in the sidebar.
+	if err := tt.RightClick("周末去杭州"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if got := strings.Join(tt.Menu(), ","); got != "重命名…,导出为 Markdown…,-,删除对话" {
+		t.Fatalf("menu %q", got)
+	}
+	if err := tt.ChooseMenuItem("重命名…"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if !a.renameOpen || !tt.Focused("对话名称") {
+		t.Fatalf("rename open %v, texts %q", a.renameOpen, tt.Texts())
+	}
+	snapshot(t, tt, "rename")
+	tt.Key(ui.Cmd, ui.KeyA)
+	tt.Type("  杭州两日游 ")
+	tt.Key(0, ui.KeyEnter)
+	tt.Frame()
+	if a.renameOpen || a.chats[1].Title != "杭州两日游" || !tt.HasText("杭州两日游") {
+		t.Fatalf("open %v, title %q, texts %q", a.renameOpen, a.chats[1].Title, tt.Texts())
+	}
+	// It keeps its place, as it was not written in.
+	if a.chats[1].Updated != updated || a.chats[0].ID != "go" {
+		t.Errorf("chats %+v", a.chats)
+	}
+	if b := newApp(a.store); b.chat("trip") == nil || b.chat("trip").Title != "杭州两日游" {
+		t.Errorf("saved chats %+v", b.chats)
+	}
+
+	// From the title bar of the chat shown: a blank title is not taken,
+	// and Escape cancels.
+	a.open("go")
+	tt.Frame()
+	if err := tt.Click("更多"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if err := tt.ChooseMenuItem("重命名…"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	tt.Key(ui.Cmd, ui.KeyA)
+	tt.Key(0, ui.KeyBackspace)
+	tt.Key(0, ui.KeyEnter)
+	tt.Frame()
+	if a.renameOpen || a.chats[0].Title != "Go 并发" {
+		t.Errorf("open %v, title %q", a.renameOpen, a.chats[0].Title)
+	}
+	a.startRename("go")
+	tt.Frame()
+	tt.Type("改了又不要")
+	tt.Key(0, ui.KeyEscape)
+	tt.Frame()
+	if a.renameOpen || a.chats[0].Title != "Go 并发" {
+		t.Errorf("open %v, title %q after Escape", a.renameOpen, a.chats[0].Title)
+	}
+}

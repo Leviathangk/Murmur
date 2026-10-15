@@ -104,11 +104,7 @@ func (s store) writeImage(img *Image) error {
 	if s.dir == "" || img.File != "" {
 		return nil
 	}
-	ext := strings.TrimPrefix(img.MIME, "image/")
-	if ext == "jpeg" {
-		ext = "jpg"
-	}
-	name := newID() + "." + ext
+	name := newID() + "." + extension(img.MIME)
 	if err := os.MkdirAll(filepath.Join(s.dir, "images"), 0o700); err != nil {
 		return err
 	}
@@ -117,6 +113,15 @@ func (s store) writeImage(img *Image) error {
 	}
 	img.File, img.data = name, nil
 	return nil
+}
+
+// extension returns the extension of a file of an image of the MIME type.
+func extension(mime string) string {
+	ext := strings.TrimPrefix(mime, "image/")
+	if ext == "jpeg" {
+		ext = "jpg"
+	}
+	return ext
 }
 
 // removeImages deletes the files of the images of c.

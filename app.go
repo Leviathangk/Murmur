@@ -33,6 +33,19 @@ type app struct {
 	collapsed bool // the sidebar is hidden
 	md        markdown.Options
 
+	search      string    // what is searched for in the sidebar
+	searchInput ui.Handle // the field it is typed in
+	searched    string    // the search of found
+	found       []found   // the chats matching it
+	searchStale bool      // the chats changed since found was searched
+
+	renaming   string // the ID of the chat being renamed
+	renameOpen bool
+	newTitle   string // the title typed for it
+
+	exportDir string // the folder exported to last
+	exported  string // the file just exported, to tell in a toast
+
 	settingsOpen bool
 	settingsTab  int
 	editing      string // the ID of the model edited in the settings
@@ -51,11 +64,14 @@ type app struct {
 	// openImages asks for images to attach, blocking until the user
 	// chooses; tests replace it.
 	openImages func() ([]string, error)
+	// saveAs asks where to save a file, named name at first in dir,
+	// blocking until the user chooses, "" when canceled; tests replace it.
+	saveAs func(dir, name string) (string, error)
 }
 
 func newApp(s store) *app {
 	a := &app{store: s, stream: llm.Stream, applyTheme: mygo.Theme.SetSource}
-	a.openImages = a.openImagesDialog
+	a.openImages, a.saveAs = a.openImagesDialog, a.saveAsDialog
 	a.settings = s.loadSettings()
 	a.chats = s.loadChats()
 	for _, c := range a.chats {
@@ -280,15 +296,42 @@ func (a *app) newChat() {
 	a.current, a.selected = nil, ""
 }
 
-// open shows the chat of the given ID.
-func (a *app) open(id string) {
+// chat returns the chat of the given ID, or nil.
+func (a *app) chat(id string) *Chat {
 	for _, c := range a.chats {
 		if c.ID == id {
-			a.current, a.selected = c, id
-			return
+			return c
 		}
 	}
+	return nil
+}
+
+// open shows the chat of the given ID.
+func (a *app) open(id string) {
+	if c := a.chat(id); c != nil {
+		a.current, a.selected = c, id
+		return
+	}
 	a.newChat()
+}
+
+// startRename asks for a new title for the chat of the given ID.
+func (a *app) startRename(id string) {
+	if c := a.chat(id); c != nil {
+		a.renaming, a.renameOpen, a.newTitle = id, true, c.Title
+	}
+}
+
+// rename gives the chat of the given ID title, unless it is blank. The
+// chat keeps its place: it was not written in.
+func (a *app) rename(id, title string) {
+	title = strings.TrimSpace(title)
+	c := a.chat(id)
+	if c == nil || title == "" || title == c.Title {
+		return
+	}
+	c.Title = title
+	a.saveChats()
 }
 
 // deleteChat removes the chat of the given ID.
@@ -308,7 +351,10 @@ func (a *app) deleteChat(id string) {
 	}
 }
 
+// saveChats writes the chats, as they changed: what is searched for is
+// searched again.
 func (a *app) saveChats() {
+	a.searchStale = true
 	if err := a.store.write("chats.json", a.chats); err != nil {
 		a.toast = "保存对话失败：" + err.Error()
 	}

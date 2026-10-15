@@ -30,6 +30,11 @@ func (a *app) view(c *ui.Context) {
 	if c.Shortcut(ui.Cmd, ui.KeyComma) {
 		a.openSettings()
 	}
+	if c.Shortcut(ui.Cmd, ui.KeyF) {
+		a.collapsed = false
+		a.searchInput.Focus(c)
+	}
+	a.exportToast(c)
 
 	vibrant := c.Vibrancy()
 	if vibrant {
@@ -69,6 +74,7 @@ func (a *app) view(c *ui.Context) {
 	})
 
 	a.settingsView(c)
+	a.renameDialog(c)
 	a.imageViewer(c)
 	a.autosave()
 }
@@ -97,32 +103,55 @@ func iconButton(c *ui.Context, svg *ui.SVG, label string) ui.Element {
 	return b
 }
 
-// sidebar is the chats, under the room the window controls take.
+// sidebar is the chats, under the room the window controls take, or
+// those matching what is searched for, each with the words around the
+// match.
 func (a *app) sidebar(c *ui.Context, vibrant bool) {
 	t := c.Theme()
 	ui.Row(c).Height(titleBarHeight).Shrink(0).AlignItems(ui.Center).Padding(0, 10, 0, 0).DragWindow().Children(func() {
 		ui.Spacer(c)
 		iconButton(c.Key("new"), newChatIcon, "新对话").OnClick(a.newChat)
 	})
-	if len(a.chats) == 0 {
+	a.searchField(c)
+	searching := strings.TrimSpace(a.search) != ""
+	results := a.results()
+	switch {
+	case len(a.chats) == 0:
 		ui.Text(c, "还没有对话").FontSize(13).TextColor(t.TextMuted).Padding(8, 18)
 		ui.Spacer(c)
-	} else {
+	case searching && len(results) == 0:
+		ui.Text(c, "没有找到相关对话").FontSize(13).TextColor(t.TextMuted).Padding(8, 18)
+		ui.Spacer(c)
+	default:
 		deleted := ""
+		item := func(ch *Chat) ui.Element {
+			title := ch.Title
+			if title == "" {
+				title = "新对话"
+			}
+			id := ch.ID
+			return ui.SidebarItem(c.Key(id), id, nil, title).ContextMenu(func(m *ui.Menu) { a.chatMenu(m, id, &deleted) })
+		}
 		list := ui.Sidebar(c, &a.selected, func() {
+			if searching {
+				ui.SidebarSection(c.Key("found"), fmt.Sprintf("找到 %d 个对话", len(results)), nil, func() {
+					for _, f := range results {
+						it := item(f.chat)
+						if f.snippet != "" {
+							// The words matched show on a line of their own,
+							// under the title.
+							it.Wrap().Children(func() {
+								ui.Text(c, f.snippet).FontSize(12).Opacity(0.6).SingleLine().FillWidth()
+							})
+						}
+					}
+				})
+				return
+			}
 			for _, g := range groupChats(a.chats, time.Now()) {
 				ui.SidebarSection(c.Key(g.title), g.title, nil, func() {
 					for _, ch := range g.chats {
-						title := ch.Title
-						if title == "" {
-							title = "新对话"
-						}
-						id := ch.ID
-						ui.SidebarItem(c.Key(id), id, nil, title).ContextMenu(func(m *ui.Menu) {
-							if m.Item("删除对话").Chosen() {
-								deleted = id
-							}
-						})
+						item(ch)
 					}
 				})
 			}
@@ -132,6 +161,9 @@ func (a *app) sidebar(c *ui.Context, vibrant bool) {
 		}
 		if list.Changed() {
 			a.open(a.selected)
+			if searching {
+				a.showMatch(results)
+			}
 		}
 		if deleted != "" {
 			a.deleteChat(deleted)
@@ -147,6 +179,82 @@ func (a *app) sidebar(c *ui.Context, vibrant bool) {
 			ui.Text(c, "设置").FontSize(13)
 		})
 		b.OnClick(a.openSettings)
+	})
+}
+
+// searchField is where chats are searched for, as they are typed: Cmd+F
+// reaches it, and Escape clears it.
+func (a *app) searchField(c *ui.Context) {
+	t := c.Theme()
+	ui.Box(c).Padding(0, 10, 6, 10).Shrink(0).Children(func() {
+		box := ui.Row(c.Key("search")).Gap(6).Padding(0, 8).Radius(8).AlignItems(ui.Center).
+			Background(t.Text.Alpha(0.05)).Border(1, ui.Transparent)
+		if a.searchInput.Focused(c) {
+			box.Background(t.Background).Border(1, t.Accent)
+		}
+		box.Children(func() {
+			ui.Icon(c, searchIcon).Size(14, 14).Shrink(0).TextColor(t.TextMuted)
+			ui.TextInputBase(c.Key("query"), &a.search).Bind(&a.searchInput).Grow(1).MinWidth(0).Padding(6, 0).FontSize(13).
+				Placeholder("搜索对话").Label("搜索对话").
+				OnShortcut(0, ui.KeyEscape, func() { a.search = "" })
+			if a.search != "" {
+				b := ui.ButtonBase(c.Key("clear")).Size(18, 18).Radius(9).Center().Shrink(0).TextColor(t.TextMuted).Label("清除搜索")
+				if b.Hovered() {
+					b.Background(t.SurfaceHover).TextColor(t.Text)
+				}
+				b.Children(func() { ui.Icon(c, closeIcon).Size(12, 12) })
+				b.OnClick(func() {
+					a.search = ""
+					a.searchInput.Focus(c)
+				})
+			}
+		})
+	})
+}
+
+// showMatch scrolls the chat shown to where the search found it.
+func (a *app) showMatch(results []found) {
+	for _, f := range results {
+		if f.chat == a.current && f.message >= 0 {
+			f.chat.list.ScrollTo(f.message, ui.Center)
+		}
+	}
+}
+
+// chatMenu is the menu of the chat of the given ID: deleting it is left
+// to the caller, through deleted, as it takes the chat out of a list that
+// may be being built.
+func (a *app) chatMenu(m *ui.Menu, id string, deleted *string) {
+	if m.Item("重命名…").Chosen() {
+		a.startRename(id)
+	}
+	if m.Item("导出为 Markdown…").Chosen() {
+		a.exportChat(id)
+	}
+	m.Separator()
+	if m.Item("删除对话").Chosen() {
+		*deleted = id
+	}
+}
+
+// renameDialog asks for a new title for the chat being renamed.
+func (a *app) renameDialog(c *ui.Context) {
+	t := c.Theme()
+	ui.DialogBase(c.Key("rename"), &a.renameOpen, func(backdrop, panel ui.Element) {
+		backdrop.Background(ui.RGBA(0, 0, 0, 0.32))
+		panel.Width(380).MaxWidthPercent(94).Padding(20).Gap(14).Radius(14).
+			Background(t.Background).Border(1, t.Border).Shadow(0, 24, 64, 0, ui.RGBA(0, 0, 0, 0.28))
+		id := a.renaming
+		done := func() {
+			a.rename(id, a.newTitle)
+			a.renameOpen = false
+		}
+		ui.Text(c, "重命名对话").FontSize(16).Bold()
+		ui.TextInput(c.Key("title"), &a.newTitle).Label("对话名称").Placeholder("对话名称").AutoFocus().OnSubmit(done)
+		ui.Row(c).Gap(8).Justify(ui.End).Children(func() {
+			ui.Button(c.Key("cancel"), "取消").OnClick(func() { a.renameOpen = false })
+			ui.PrimaryButton(c.Key("save"), "保存").Disabled(strings.TrimSpace(a.newTitle) == "").OnClick(done)
+		})
 	})
 }
 
@@ -197,13 +305,22 @@ func (a *app) pane(c *ui.Context, titleLeft float32) {
 	}
 	dragOver := col.FileDragOver()
 	col.Children(func() {
-		ui.Row(c).Height(titleBarHeight).Shrink(0).AlignItems(ui.Center).Padding(0, bar.Right+16, 0, 20+titleLeft).DragWindow().Children(func() {
+		deleted := ""
+		ui.Row(c).Height(titleBarHeight).Shrink(0).AlignItems(ui.Center).Gap(8).Padding(0, bar.Right+12, 0, 20+titleLeft).DragWindow().Children(func() {
 			title := "新对话"
 			if a.current != nil && a.current.Title != "" {
 				title = a.current.Title
 			}
 			ui.Text(c, title).FontSize(14).Bold().SingleLine().Shrink(1)
+			if ch := a.current; ch != nil {
+				ui.Spacer(c)
+				id := ch.ID
+				iconButton(c.Key("more"), moreIcon, "更多").Shrink(0).Menu(func(m *ui.Menu) { a.chatMenu(m, id, &deleted) })
+			}
 		})
+		if deleted != "" {
+			a.deleteChat(deleted)
+		}
 		if ch := a.current; ch != nil && len(ch.Messages) > 0 {
 			a.messages(c, ch)
 		} else {
