@@ -46,6 +46,9 @@ func main() {
 	a := newApp(store{dir: dir})
 	// The app starts in the appearance chosen last.
 	mygo.Theme.SetSource(a.settings.Theme)
+	// A click on a notification shows its chat, also the click that
+	// launched the app (macOS), which comes before the window (notify.go).
+	mygo.App.OnNotificationClick(a.openNotified)
 	mygo.App.WhenReady(func() {
 		a.win = mygo.NewWindow(mygo.WindowOptions{
 			Title:     "Murmur",
@@ -63,6 +66,9 @@ func main() {
 			Content:        ui.View(a.view),
 		})
 		a.stayInBackground()
+		// The window brought to the front shows what the notifications
+		// told: they do not wait in Notification Center.
+		a.win.OnFocus(mygo.ClearNotifications)
 		if onReady != nil {
 			onReady(a)
 		}

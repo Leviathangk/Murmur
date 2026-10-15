@@ -62,6 +62,9 @@ type Settings struct {
 	Proxy        string   `json:"proxy"`
 	// Theme is the appearance chosen; empty follows the system.
 	Theme mygo.ThemeSource `json:"theme,omitempty"`
+	// Notify tells of the replies that come while the window is not in
+	// front, in system notifications.
+	Notify bool `json:"notify"`
 }
 
 // model returns the model of the given ID, or nil.
@@ -149,7 +152,7 @@ func (s store) write(name string, v any) error {
 }
 
 func (s store) loadSettings() *Settings {
-	st := &Settings{Thinking: true}
+	st := &Settings{Thinking: true, Notify: true}
 	s.read("settings.json", st)
 	return st
 }

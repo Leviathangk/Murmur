@@ -25,6 +25,7 @@ search.go     搜索对话
 export.go     导出对话为 Markdown
 presets.go    服务商预设
 tray.go       托盘图标，关掉窗口后留在后台
+notify.go     回复完成时发系统通知，点通知打开对话
 llm/          模型调用：OpenAI 兼容（SSE）和 Anthropic（官方 SDK）
 demo.go       演示构建（-tags demo），连本地模型自动跑一遍并截图
 ```
@@ -80,6 +81,17 @@ Anthropic 协议用官方 Go SDK：Claude 4.6 及以后的模型用自适应思�
 - macOS 全屏时直接隐藏会留下一个空白的全屏桌面，所以先退出全屏，等 `OnLeaveFullScreen` 再隐藏
 - 启动时 `RequestSingleInstanceLock`，再次启动的进程把命令行交给已经在运行的那个后退出，后者显示窗口（`OnSecondInstance`），不会出现两个托盘图标
 - 托盘创建失败时（如 Linux 没有 AppIndicator）不拦关闭，关掉窗口就退出，免得窗口再也打不开
+
+## 通知的实现
+
+- 回复结束时（正常结束或出错；点「停止」的不算，用户就在跟前）调用 `a.notify`。窗口有焦点（`Window.IsFocused`）时不发，回复就在眼前；窗口隐藏、最小化或在别的应用后面都发
+- 标题是对话标题，副标题是模型名（Windows 的气泡通知没有副标题，MyGo 把它放在正文第一行），正文是回复开头 100 个字，去掉 `**`、反引号和行首的 `#`、`>`，换行合成空格；出错时是「回复失败：」加错误信息
+- 通知 ID 用对话 ID：同一个对话的新通知替换旧的。点击时 `App.OnNotificationClick` 拿到 ID，打开对话、滚到末尾、显示窗口
+- 这个回调在 `App.Run` 之前注册：macOS 上 Murmur 已经退出时，点通知中心里留下的通知会启动它，这次点击在窗口创建之前就送到，直接把对话设为当前，窗口打开时显示的就是它
+- `Notification.Show` 在 macOS 上第一次会等用户回答是否允许，所以在 goroutine 里调用；用户不允许（`ErrNotificationsDenied`）不记日志，其他错误记一行日志
+- 窗口获得焦点（`OnFocus`）时调用 `mygo.ClearNotifications()`：回复已经在窗口里看到了，不再留在通知中心
+- macOS 只有打包的应用能发通知，`go tool mygo dev` 和 `mygo build` 出来的都是；直接 `go run .` 发不出，日志里会有 `no notification`
+- 开关存在 `settings.json` 的 `notify` 字段，没有这个字段的旧设置当作打开
 
 ## 打包
 

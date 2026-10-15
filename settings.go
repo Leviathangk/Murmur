@@ -242,6 +242,9 @@ func (a *app) generalSettings(c *ui.Context) {
 					ui.Segmented(c.Key("theme"), &i, "跟随系统", "浅色", "深色").Label("外观").AlignSelf(ui.Start).
 						OnChange(func() { a.setTheme(themes[i]) })
 				})
+				ui.Field(c, "通知", func() {
+					ui.Checkbox(c.Key("notify"), &a.settings.Notify, "回复完成时发送系统通知")
+				}).Description("Murmur 不在前台时才通知，点通知打开那个对话")
 				ui.Field(c, "系统提示词", func() {
 					ui.TextArea(c.Key("system"), &a.settings.SystemPrompt).Lines(4, 12).Placeholder("每次对话开始时发给模型的说明，比如：你是一个简洁的助手，用中文回答。")
 				})

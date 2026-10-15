@@ -68,11 +68,14 @@ type app struct {
 	// saveAs asks where to save a file, named name at first in dir,
 	// blocking until the user chooses, "" when canceled; tests replace it.
 	saveAs func(dir, name string) (string, error)
+	// notify tells of a reply in a system notification, unless the window
+	// is in front; tests replace it.
+	notify func(mygo.NotificationOptions)
 }
 
 func newApp(s store) *app {
 	a := &app{store: s, stream: llm.Stream, applyTheme: mygo.Theme.SetSource}
-	a.openImages, a.saveAs = a.openImagesDialog, a.saveAsDialog
+	a.openImages, a.saveAs, a.notify = a.openImagesDialog, a.saveAsDialog, a.notifyDesktop
 	a.settings = s.loadSettings()
 	a.chats = s.loadChats()
 	for _, c := range a.chats {
@@ -242,6 +245,10 @@ func (a *app) reply(c *Chat, m *Model) {
 			}
 			c.Updated = time.Now()
 			a.saveChats()
+			// A reply stopped was stopped by the user, who is there.
+			if !stopped && a.settings.Notify {
+				a.notify(replyNotification(c, reply))
+			}
 		})
 	})
 }
