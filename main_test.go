@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"image"
 	"image/png"
 	"os"
 	"path/filepath"
@@ -369,6 +370,78 @@ func TestSendButton(t *testing.T) {
 	if a.draft != "" {
 		t.Errorf("draft %q after sending", a.draft)
 	}
+}
+
+func TestCopyMessage(t *testing.T) {
+	a, _ := testApp(t)
+	a.addModel(presets[0])
+	tt := ui.NewTester(a.view, 1080, 720)
+	const text = "第一行\n第二行"
+	a.send(text)
+	tt.Frame()
+
+	// The button is beside the bubble, before the reply's, and shows only
+	// while the pointer is over the message.
+	bubble, ok := tt.Find(text)
+	if !ok {
+		t.Fatalf("no message in %q", tt.Texts())
+	}
+	r, ok := tt.Find("复制")
+	if !ok || r.X+r.W > bubble.X || r.Y > bubble.Y+bubble.H {
+		t.Fatalf("copy button at %+v, the message at %+v", r, bubble)
+	}
+	if !blank(tt.Image(), r) {
+		t.Error("copy button shown before the pointer is over the message")
+	}
+	tt.Move(bubble.X+bubble.W/2, bubble.Y+bubble.H/2)
+	tt.Frame()
+	time.Sleep(150 * time.Millisecond) // it fades in
+	tt.Frame()
+	if blank(tt.Image(), r) {
+		t.Error("copy button hidden with the pointer over the message")
+	}
+	snapshot(t, tt, "copy-message")
+	if err := tt.Click("复制"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if got := tt.Clipboard(); got != text {
+		t.Errorf("copied %q", got)
+	}
+	if !tt.HasText("已复制") {
+		t.Errorf("no toast in %q", tt.Texts())
+	}
+
+	// A message of only images has nothing to copy.
+	pasteImage(t, tt, pngOf(t, picture(320, 200, 255)))
+	tt.Key(0, ui.KeyEnter)
+	tt.Frame()
+	if n := len(a.current.Messages); n != 4 || a.current.Messages[2].Content != "" {
+		t.Fatalf("%d messages", n)
+	}
+	n := 0
+	for _, s := range tt.Texts() {
+		if s == "复制" {
+			n++
+		}
+	}
+	if n != 3 {
+		t.Errorf("%d copy buttons for 2 replies and a message with text", n)
+	}
+}
+
+// blank reports whether the pixels of img in r, in DIPs at a scale of 1,
+// are all of one color.
+func blank(img *image.RGBA, r ui.Rect) bool {
+	first := img.RGBAAt(int(r.X), int(r.Y))
+	for y := int(r.Y); y < int(r.Y+r.H); y++ {
+		for x := int(r.X); x < int(r.X+r.W); x++ {
+			if img.RGBAAt(x, y) != first {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func TestGroupChats(t *testing.T) {

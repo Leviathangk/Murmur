@@ -362,7 +362,8 @@ func (a *app) messages(c *ui.Context, ch *Chat) {
 func (a *app) message(c *ui.Context, ch *Chat, i int) {
 	t := c.Theme()
 	m := ch.Messages[i]
-	ui.Column(c).FillWidth().MaxWidth(contentWidth).Margin(0, ui.Auto).Gap(8).Children(func() {
+	col := ui.Column(c).FillWidth().MaxWidth(contentWidth).Margin(0, ui.Auto).Gap(8)
+	col.Children(func() {
 		if m.Role == "user" {
 			if len(m.Images) > 0 {
 				ui.Row(c.Key("images")).Wrap().Justify(ui.End).Gap(8).Children(func() {
@@ -373,8 +374,13 @@ func (a *app) message(c *ui.Context, ch *Chat, i int) {
 				})
 			}
 			if m.Content != "" {
-				ui.Row(c).Children(func() {
+				// The copy button beside the bubble shows while the pointer
+				// is over the message, or the button has the focus; it keeps
+				// its room, so that nothing moves as it shows.
+				shown := col.Animate("copy", b2f(col.Hovered() || col.FocusWithin()), 120*time.Millisecond)
+				ui.Row(c).Gap(6).AlignItems(ui.End).Children(func() {
 					ui.Spacer(c)
+					a.copyButton(c, m.Content).Shrink(0).Margin(0, 0, 6, 0).Opacity(shown)
 					ui.Text(c, m.Content).Selectable().LineHeight(1.5).Padding(10, 16).Radius(18).Background(t.Surface).MaxWidthPercent(80)
 				})
 			}
@@ -452,11 +458,7 @@ func (a *app) actions(c *ui.Context, ch *Chat, i int) {
 	last := i == len(ch.Messages)-1
 	ui.Row(c).Gap(2).AlignItems(ui.Center).Margin(-4, 0, 0, -6).Children(func() {
 		if m.Content != "" {
-			svc := c.Services()
-			iconButton(c.Key("copy"), copyIcon, "复制").OnClick(func() {
-				svc.WriteClipboard(m.Content)
-				a.toast = "已复制"
-			})
+			a.copyButton(c, m.Content)
 		}
 		if last {
 			iconButton(c.Key("retry"), retryIcon, "重新生成").OnClick(func() { a.regenerate(ch) })
@@ -473,6 +475,15 @@ func (a *app) actions(c *ui.Context, ch *Chat, i int) {
 			ui.Text(c, s).FontSize(12).TextColor(t.TextMuted).Margin(0, 0, 0, left).
 				Tooltip("输入包括系统提示词和之前的对话，输出包括思考过程")
 		}
+	})
+}
+
+// copyButton puts text on the clipboard, as a message's is.
+func (a *app) copyButton(c *ui.Context, text string) ui.Element {
+	svc := c.Services()
+	return iconButton(c.Key("copy"), copyIcon, "复制").OnClick(func() {
+		svc.WriteClipboard(text)
+		a.toast = "已复制"
 	})
 }
 
