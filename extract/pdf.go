@@ -11,6 +11,8 @@ import (
 
 	"github.com/ledongthuc/pdf"
 	"golang.org/x/text/encoding/simplifiedchinese"
+
+	"github.com/Qsnh/Murmur/locales"
 )
 
 // The PDF is parsed by github.com/ledongthuc/pdf: its objects, streams
@@ -18,7 +20,7 @@ import (
 // encoding to its ToUnicode map, which macOS and Word write the text in,
 // and shows no spaces nor lines where a page leaves room for them.
 
-var errPDF = errors.New("PDF 已损坏或格式不支持，无法读取")
+func errPDF() error { return errors.New(locales.ExtractPDFDamaged()) }
 
 // maxForms is how deep forms are read within others.
 const maxForms = 8
@@ -27,11 +29,11 @@ const maxForms = 8
 // lines where the text moves to another, spaces where it leaves a gap.
 func readPDF(w *writer, data []byte) (err error) {
 	if !bytes.Contains(data[:min(len(data), 1024)], []byte("%PDF-")) {
-		return errors.New("不是 PDF 文件")
+		return errors.New(locales.ExtractNotPDF())
 	}
 	defer func() {
 		if recover() != nil {
-			err = errPDF
+			err = errPDF()
 		}
 	}()
 	if bytes.HasPrefix(data, []byte("%PDF-2.")) {
@@ -41,9 +43,9 @@ func readPDF(w *writer, data []byte) (err error) {
 	r, err := pdf.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		if strings.Contains(err.Error(), "encrypt") {
-			return errors.New("PDF 已加密（有密码或权限保护），请去掉密码或另存一份不加密的 PDF 后再添加")
+			return errors.New(locales.ExtractPDFEncrypted())
 		}
-		return errPDF
+		return errPDF()
 	}
 	var pages []pageRef
 	listPages(r.Trailer().Key("Root").Key("Pages"), pdf.Value{}, 0, &pages)

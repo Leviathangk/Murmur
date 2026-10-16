@@ -13,6 +13,7 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"github.com/Qsnh/Murmur/extract"
+	"github.com/Qsnh/Murmur/locales"
 )
 
 // transcript is a chat to export, copied on the main thread to be written
@@ -123,7 +124,7 @@ func (t transcript) markdown(links, docLinks [][]string) string {
 	var b strings.Builder
 	title := strings.Join(strings.Fields(t.title), " ")
 	if title == "" {
-		title = "对话"
+		title = locales.ExportUntitled()
 	}
 	b.WriteString("# " + title + "\n\n")
 	if !t.start.IsZero() {
@@ -133,35 +134,35 @@ func (t transcript) markdown(links, docLinks [][]string) string {
 		if m.content == "" && m.reasoning == "" && m.err == "" && len(m.images) == 0 && len(m.docs) == 0 {
 			continue // a reply stopped before it came
 		}
-		who := "你"
+		who := locales.ExportYou()
 		if m.role == "assistant" {
 			who = m.model
 			if who == "" {
-				who = "模型"
+				who = locales.ExportModel()
 			}
 		}
 		b.WriteString("## " + who + "\n\n")
 		if r := strings.TrimSpace(m.reasoning); r != "" {
-			label := "思考过程"
+			label := locales.ThinkingTitle()
 			if m.thinkMS > 0 {
-				label = "已思考 " + seconds(m.thinkMS)
+				label = locales.ThinkingDone(seconds(m.thinkMS))
 			}
 			quote(&b, "**"+label+"**\n\n"+r)
 		}
 		for j, l := range docLinks[i] {
 			name := markdownEscaper.Replace(m.docs[j].name)
 			if l == "" {
-				b.WriteString("*（文件已丢失：" + name + "）*\n\n")
+				b.WriteString("*" + locales.ExportDocumentMissing(name) + "*\n\n")
 				continue
 			}
-			b.WriteString("附件：[" + name + "](<" + linkPath(l) + ">)\n\n")
+			b.WriteString(locales.ExportAttachment("["+name+"](<"+linkPath(l)+">)") + "\n\n")
 		}
 		for _, l := range links[i] {
 			if l == "" {
-				b.WriteString("*（图片已丢失）*\n\n")
+				b.WriteString("*" + locales.ExportImageMissing() + "*\n\n")
 				continue
 			}
-			b.WriteString("![图片](<" + linkPath(l) + ">)\n\n")
+			b.WriteString("![" + locales.ExportImage() + "](<" + linkPath(l) + ">)\n\n")
 		}
 		if s := strings.TrimSpace(m.content); s != "" {
 			// The app shows the user's text as it is, and a reply's as
@@ -169,7 +170,7 @@ func (t transcript) markdown(links, docLinks [][]string) string {
 			b.WriteString(asMarkdown(s, m.role == "user") + "\n\n")
 		}
 		if m.err != "" {
-			quote(&b, "**出错了**："+m.err)
+			quote(&b, locales.ExportError(m.err))
 		}
 	}
 	return strings.TrimRight(b.String(), "\n") + "\n"
@@ -263,7 +264,7 @@ func fileName(title string) string {
 		s = strings.TrimRight(string(r[:60]), ". ")
 	}
 	if s == "" {
-		s = "对话"
+		s = locales.ExportUntitled()
 	}
 	if reservedName(s) {
 		s = "_" + s
@@ -282,13 +283,14 @@ func reservedName(s string) bool {
 }
 
 type saveKind struct {
-	title, button, filter string
-	exts                  []string
+	title, button func() string
+	filter        string
+	exts          []string
 }
 
 var saveKinds = map[string]saveKind{
-	".md":   {"导出对话", "导出", "Markdown", []string{"md", "markdown"}},
-	".html": {"下载 HTML 文件", "下载", "HTML", []string{"html", "htm"}},
+	".md":   {locales.ExportDialogTitle, locales.ExportDialogButton, "Markdown", []string{"md", "markdown"}},
+	".html": {locales.DownloadHTML, locales.Download, "HTML", []string{"html", "htm"}},
 }
 
 func withExtension(path string, exts []string) string {
@@ -318,7 +320,7 @@ func (a *app) exportChat(id string) {
 		}
 		a.update(func() {
 			if err != nil {
-				a.toast = "导出失败：" + err.Error()
+				a.toast = locales.ExportFailed(err.Error())
 				return
 			}
 			a.exportDir, a.exported = filepath.Dir(path), path
@@ -337,9 +339,9 @@ func (a *app) saveAsDialog(dir, name string) (string, error) {
 	k := saveKinds[filepath.Ext(name)]
 	path, err := mygo.Dialog.Save(mygo.SaveDialogOptions{
 		Parent:            a.win,
-		Title:             k.title,
+		Title:             k.title(),
 		DefaultPath:       filepath.Join(dir, name),
-		ButtonLabel:       k.button,
+		ButtonLabel:       k.button(),
 		Filters:           []mygo.FileFilter{{Name: k.filter, Extensions: k.exts}},
 		CreateDirectories: true,
 	})
@@ -355,8 +357,8 @@ func (a *app) saveAsDialog(dir, name string) (string, error) {
 		r, err := mygo.Dialog.Message(mygo.MessageOptions{
 			Parent:        a.win,
 			Type:          mygo.MessageWarning,
-			Message:       "「" + filepath.Base(full) + "」已存在，要替换它吗？",
-			Buttons:       []string{"替换", "取消"},
+			Message:       locales.ReplaceFile(filepath.Base(full)),
+			Buttons:       []string{locales.Replace(), locales.Cancel()},
 			DefaultButton: 1,
 			CancelButton:  1,
 		})
@@ -370,19 +372,19 @@ func (a *app) saveAsDialog(dir, name string) (string, error) {
 // exportToast tells that a chat was exported, or a page downloaded, with a
 // button showing the file in the file manager.
 func (a *app) exportToast(c *ui.Context) {
-	savedToast(c, &a.exported, "已导出")
-	savedToast(c, &a.savedPage, "已下载")
+	savedToast(c, &a.exported, locales.Exported)
+	savedToast(c, &a.savedPage, locales.Downloaded)
 }
 
-func savedToast(c *ui.Context, saved *string, verb string) {
+func savedToast(c *ui.Context, saved *string, message func(name string) string) {
 	if *saved == "" {
 		return
 	}
 	path := *saved
 	*saved = ""
-	reveal := "在访达中显示"
+	reveal := locales.ShowInFinder()
 	if runtime.GOOS == "windows" {
-		reveal = "在资源管理器中显示"
+		reveal = locales.ShowInExplorer()
 	}
-	c.ToastAction(verb+"「"+filepath.Base(path)+"」", reveal, func() { mygo.Shell.ShowItemInFolder(path) })
+	c.ToastAction(message(filepath.Base(path)), reveal, func() { mygo.Shell.ShowItemInFolder(path) })
 }

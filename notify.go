@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/egoist/mygo"
+
+	"github.com/Qsnh/Murmur/locales"
 )
 
 // A reply that comes while the window is not in front, closed or behind
@@ -19,9 +21,9 @@ func replyNotification(c *Chat, reply *Message) mygo.NotificationOptions {
 	body := preview(reply.Content)
 	switch {
 	case reply.Error != "":
-		body = "回复失败：" + preview(reply.Error)
+		body = locales.NotifyReplyFailed(preview(reply.Error))
 	case body == "":
-		body = "回复完成"
+		body = locales.NotifyReplyDone()
 	}
 	return mygo.NotificationOptions{ID: c.ID, Title: c.Title, Subtitle: reply.Model, Body: body}
 }

@@ -27,6 +27,7 @@ preview.go    预览回复里的网页：HTML / SVG 代码块和整页 HTML
 search.go     搜索对话
 export.go     导出对话为 Markdown
 presets.go    服务商预设
+locales/      界面文字：简体中文（源语言）、繁体中文、英文各一个语言目录，catalog_gen.go 由 mygo 生成
 tray.go       托盘图标，关掉窗口后留在后台
 notify.go     回复完成时发系统通知，点通知打开对话
 update.go     检查、下载和安装新版本（MyGo 的更新窗口）
@@ -139,7 +140,7 @@ Anthropic 协议用官方 Go SDK：Claude 4.6 及以后的模型用自适应思�
 
 ## 更新的实现
 
-用 MyGo 的签名更新（[文档](https://mygo.egoist.dev/docs/updates)）和它的原生 UI 更新窗口（`plugins/updater/native`），界面固定为简体中文：
+用 MyGo 的签名更新（[文档](https://mygo.egoist.dev/docs/updates)）和它的原生 UI 更新窗口（`plugins/updater/native`），界面语言在启动时按 Murmur 的语言定下：
 
 - `mygo.json` 的 `updates` 写着公钥和仓库 `Qsnh/Murmur`。`mygo build` 拿到私钥（环境变量 `MYGO_UPDATER_PRIVATE_KEY`）时，给每个平台的应用打一个签名的 `murmur-<版本>-<平台>.tar.gz`，从已发布的最近 3 个版本各做一个增量包（`.delta`，只含变化的部分，不比完整包小的不要），再写清单 `update-<平台>.json`：版本、`CHANGELOG.md` 里这个版本的说明、包的地址、大小和签名。平台是 `darwin-universal`、`windows-amd64`、`windows-arm64`
 - 应用读最新正式版 Release 里自己平台的清单（`releases/latest/download/update-<平台>.json`），版本更新就弹出更新窗口；预发布版本不算最新版，不会推给用户。下载后用编译进去的公钥验签，有当前版本的增量包就只下增量，失败了再下完整包；然后在应用旁边解包、替换（macOS 换整个 `.app`，Windows 把正在运行的 exe 改名挪开，下次启动时删掉），「立即重新启动」走正常的退出流程（`RoleQuit` 一样，单实例锁先释放）再启动新版本
@@ -148,6 +149,17 @@ Anthropic 协议用官方 Go SDK：Claude 4.6 及以后的模型用自适应思�
 - MyGo 用 `http.DefaultClient` 下载，`update.go` 给它换了一个按设置里的「网络代理」走的 Transport（`autosave` 把代理存进 `updateProxy`），没填时按环境变量
 - `go tool mygo dev` 和 `go run` 都是开发版本，不检查更新，点「检查更新」只会提示「开发版本不会自行更新」
 - 设置页、托盘菜单、macOS 应用菜单（「关于」后面）都有「检查更新」；macOS 的应用菜单因此改为 `SetMenu` 自己设，其余和 MyGo 默认的一样
+
+## 多语言的实现
+
+用 MyGo 的多语言（[文档](https://mygo.egoist.dev/docs/i18n)）：`mygo.json` 的 `i18n` 指向 `locales/`，源语言是 `zh-Hans`。
+
+- 界面上的文字都在 `locales/zh-Hans.json`、`zh-Hant.json`、`en.json` 里，格式是 ICU MessageFormat（复数、日期都写在消息里）。代码里调用生成的函数，如 `locales.NewChat()`、`locales.SidebarFound(n)`，按当前语言返回
+- 加一条文字：三个文件都加上同一个键（带参数的在 `zh-Hans.json` 用 `@键名` 写明参数类型），运行 `go tool mygo generate` 重新生成 `locales/catalog_gen.go`（`mygo dev` / `mygo build` 也会自动生成），生成的文件要一起提交。`TestCatalogs` 检查三种语言的键一样，`TestInterfaceTranslated` 逐屏检查英文、繁体界面里没有漏翻的简体文字
+- 语言的选择：系统首选语言匹配到三种之一就用它（`zh-TW`、`zh-HK` 用繁体），都匹配不上用英文（`main.go` 里 `SetLanguages` 把 `en` 放第一个）。设置里手动选的语言存在 `settings.json` 的 `language` 字段，启动时在开窗前 `App.SetLocale`；选「跟随系统」存空字符串
+- 切换语言时窗口立即重绘；托盘菜单和 macOS 应用菜单在 `OnLocaleChanged` 里重建。MyGo 的更新窗口在第一次用到时定下语言，运行中切换要重新打开 Murmur 才变
+- `llm/`、`extract/` 返回的错误也走 `locales`，在出错时按当前语言生成
+- 试某种语言：`go tool mygo dev -lang en`；测试里用 `t.Setenv("MYGO_LOCALE", "en")`
 
 ## 打包
 

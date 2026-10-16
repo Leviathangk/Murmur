@@ -9,9 +9,11 @@ import (
 	"golang.org/x/text/encoding"
 	"golang.org/x/text/encoding/simplifiedchinese"
 	"golang.org/x/text/encoding/unicode"
+
+	"github.com/Qsnh/Murmur/locales"
 )
 
-var errBinary = errors.New("不是支持的文件（PDF、Word、Excel、PPT 或文本文件）")
+func errBinary() error { return errors.New(locales.ExtractUnsupported()) }
 
 // readText writes the text of data, a file of text: UTF-8, UTF-16 with its
 // byte order mark, or else GB18030, as Windows in Chinese saves text and
@@ -26,7 +28,7 @@ func readText(w *writer, data []byte) error {
 	case bytes.HasPrefix(data, []byte{0xfe, 0xff}):
 		enc = unicode.UTF16(unicode.BigEndian, unicode.ExpectBOM)
 	case binary(data):
-		return errBinary
+		return errBinary()
 	case !utf8.Valid(data):
 		enc = simplifiedchinese.GB18030
 	}
@@ -37,13 +39,13 @@ func readText(w *writer, data []byte) error {
 	} else {
 		b, err := enc.NewDecoder().Bytes(data)
 		if err != nil {
-			return errBinary
+			return errBinary()
 		}
 		text = string(b)
 		// Bytes GB18030 does not take come out as U+FFFD: many of them
 		// mean the file was not in it.
 		if enc == simplifiedchinese.GB18030 && strings.Count(text, string(utf8.RuneError))*50 > utf8.RuneCountInString(text) {
-			return errors.New("无法识别文件的文字编码，请另存为 UTF-8 后再添加")
+			return errors.New(locales.ExtractEncoding())
 		}
 	}
 	w.WriteString(text)

@@ -15,6 +15,8 @@ import (
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/markdown"
 	"github.com/egoist/mygo/ui/markdown/parser"
+
+	"github.com/Qsnh/Murmur/locales"
 )
 
 // previewBase is the address of the pages previewed: one of no server,
@@ -33,9 +35,9 @@ type page struct {
 func codePage(lang, code string) (page, bool) {
 	switch strings.ToLower(lang) {
 	case "html", "htm", "xhtml":
-		return page{title: pageTitle(code, "HTML 预览"), html: code}, true
+		return page{title: pageTitle(code, locales.PreviewHTML()), html: code}, true
 	case "svg":
-		return page{title: "SVG 预览", html: svgPage + code, svg: true}, true
+		return page{title: locales.PreviewSVG(), html: svgPage + code, svg: true}, true
 	}
 	return page{}, false
 }
@@ -76,7 +78,7 @@ func replyPage(text string) (page, bool) {
 		if end := pageEnd.FindStringIndex(src); end != nil {
 			src = src[:end[1]]
 		}
-		return page{title: pageTitle(src, "网页预览"), html: src}, true
+		return page{title: pageTitle(src, locales.PreviewWebPage()), html: src}, true
 	}
 	return page{}, false
 }
@@ -126,11 +128,11 @@ func (a *app) codeBlock(c *ui.Context, b *markdown.CodeBlockView) {
 				})
 				return btn.Clicked()
 			}
-			if button("preview", previewIcon, "预览") {
+			if button("preview", previewIcon, locales.Preview()) {
 				p, _ := codePage(b.Language, b.Code())
 				a.preview(p)
 			}
-			if !kind.svg && button("download", saveIcon, "下载") {
+			if !kind.svg && button("download", saveIcon, locales.Download()) {
 				p, _ := codePage(b.Language, b.Code())
 				a.download(p)
 			}
@@ -214,12 +216,12 @@ func (a *app) openInBrowser(p page) {
 		err = a.openPath(path)
 	}
 	if err != nil {
-		a.toast = "无法在浏览器中打开：" + err.Error()
+		a.toast = locales.PreviewBrowserFailed(err.Error())
 	}
 }
 
 func (a *app) download(p page) {
-	name := fileName(pageTitle(p.html, "网页")) + ".html"
+	name := fileName(pageTitle(p.html, locales.DownloadUntitled())) + ".html"
 	dir := a.exportDir
 	a.spawn(func() {
 		path, err := a.saveAs(dir, name)
@@ -231,7 +233,7 @@ func (a *app) download(p page) {
 		}
 		a.update(func() {
 			if err != nil {
-				a.toast = "下载失败：" + err.Error()
+				a.toast = locales.DownloadFailed(err.Error())
 				return
 			}
 			a.exportDir, a.savedPage = filepath.Dir(path), path
@@ -263,16 +265,16 @@ func (a *app) previewer(c *ui.Context) {
 		ui.Row(c).Height(48).Shrink(0).Gap(2).AlignItems(ui.Center).Padding(0, 10, 0, 18).
 			BorderWidth(0, 0, 1, 0).BorderColor(t.Border).Children(func() {
 			ui.Text(c, p.title).FontSize(14).Bold().SingleLine().Grow(1).Shrink(1).MinWidth(0).Margin(0, 8, 0, 0)
-			iconButton(c.Key("reload"), reloadIcon, "重新加载").Shrink(0).OnClick(func() {
+			iconButton(c.Key("reload"), reloadIcon, locales.PreviewReload()).Shrink(0).OnClick(func() {
 				if a.web != nil {
 					a.web.Page().LoadHTML(p.html, previewBase)
 				}
 			})
 			if !p.svg {
-				iconButton(c.Key("download"), saveIcon, "下载 HTML 文件").Shrink(0).OnClick(func() { a.download(p) })
+				iconButton(c.Key("download"), saveIcon, locales.DownloadHTML()).Shrink(0).OnClick(func() { a.download(p) })
 			}
-			iconButton(c.Key("browser"), browserIcon, "在浏览器中打开").Shrink(0).OnClick(func() { a.openInBrowser(p) })
-			iconButton(c.Key("close"), closeIcon, "关闭").Shrink(0).OnClick(func() { a.previewOpen = false })
+			iconButton(c.Key("browser"), browserIcon, locales.PreviewOpenInBrowser()).Shrink(0).OnClick(func() { a.openInBrowser(p) })
+			iconButton(c.Key("close"), closeIcon, locales.Close()).Shrink(0).OnClick(func() { a.previewOpen = false })
 		})
 		if a.web != nil {
 			ui.WebView(c, a.web).Grow(1)

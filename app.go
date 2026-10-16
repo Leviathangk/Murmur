@@ -12,6 +12,7 @@ import (
 	"github.com/egoist/mygo/ui/markdown"
 
 	"github.com/Qsnh/Murmur/llm"
+	"github.com/Qsnh/Murmur/locales"
 )
 
 // app is the state the window shows.
@@ -72,7 +73,8 @@ type app struct {
 	// stream calls the model; tests replace it.
 	stream func(ctx context.Context, cfg llm.Config, req llm.Request, emit func(llm.Event)) error
 	// applyTheme shows the app in an appearance; tests replace it.
-	applyTheme func(mygo.ThemeSource)
+	applyTheme    func(mygo.ThemeSource)
+	applyLanguage func(string)
 	// openFiles asks for images and documents to attach, blocking until
 	// the user chooses; tests replace it.
 	openFiles func() ([]string, error)
@@ -91,7 +93,7 @@ type app struct {
 }
 
 func newApp(s store) *app {
-	a := &app{store: s, stream: llm.Stream, applyTheme: mygo.Theme.SetSource}
+	a := &app{store: s, stream: llm.Stream, applyTheme: mygo.Theme.SetSource, applyLanguage: mygo.App.SetLocale}
 	a.openFiles, a.saveAs, a.notify = a.openFilesDialog, a.saveAsDialog, a.notifyDesktop
 	a.openPath = mygo.Shell.OpenPath
 	a.md.CodeBlock = a.codeBlock
@@ -157,7 +159,7 @@ func (a *app) send(text string) {
 	}
 	m := a.model()
 	if m == nil {
-		a.toast = "请先添加一个模型"
+		a.toast = locales.AddModelFirst()
 		a.openSettings()
 		return
 	}
@@ -172,7 +174,7 @@ func (a *app) send(text string) {
 		case len(a.pendingDocs) > 0:
 			title = titleOf(a.pendingDocs[0].Name)
 		default:
-			title = "图片"
+			title = locales.ChatImages()
 		}
 		c = &Chat{ID: newID(), Title: title}
 		a.chats = append([]*Chat{c}, a.chats...)
@@ -180,12 +182,12 @@ func (a *app) send(text string) {
 	}
 	for _, img := range a.pending {
 		if err := a.store.writeImage(img); err != nil {
-			a.toast = "保存图片失败：" + err.Error()
+			a.toast = locales.ImageSaveFailed(err.Error())
 		}
 	}
 	for _, doc := range a.pendingDocs {
 		if err := a.store.writeDocument(doc); err != nil {
-			a.toast = "保存文件失败：" + err.Error()
+			a.toast = locales.DocumentSaveFailed(err.Error())
 		}
 	}
 	c.Messages = append(c.Messages, &Message{Role: "user", Content: text, Images: a.pending, Documents: a.pendingDocs, Time: time.Now(), key: a.newKey()})
@@ -275,7 +277,7 @@ func (a *app) reply(c *Chat, m *Model) {
 			case err != nil:
 				reply.Error = err.Error()
 			case reply.Content == "" && reply.Reasoning == "":
-				reply.Error = "模型没有返回任何内容"
+				reply.Error = locales.ReplyEmpty()
 			}
 			c.Updated = time.Now()
 			a.saveChats()
@@ -337,8 +339,14 @@ func forkable(m *Message) bool {
 	return m.Role == "assistant" && !m.streaming && m.Error == "" && m.Content != ""
 }
 
-// forkPrefix starts the titles of the chats that go on from another.
-const forkPrefix = "分支 · "
+func forkTitle(title string) string {
+	for _, tag := range languages {
+		if strings.HasPrefix(title, locales.In(tag).ForkPrefix()) {
+			return title
+		}
+	}
+	return locales.ForkPrefix() + title
+}
 
 // fork shows a new chat of the messages of c up to message i, a reply, to
 // go on from there; c stays as it is. The two chats share the files of the
@@ -347,11 +355,7 @@ func (a *app) fork(c *Chat, i int) {
 	if c == nil || i < 0 || i >= len(c.Messages) || !forkable(c.Messages[i]) {
 		return
 	}
-	title := c.Title
-	if !strings.HasPrefix(title, forkPrefix) {
-		title = forkPrefix + title
-	}
-	f := &Chat{ID: newID(), Title: title, Updated: time.Now()}
+	f := &Chat{ID: newID(), Title: forkTitle(c.Title), Updated: time.Now()}
 	for _, m := range c.Messages[:i+1] {
 		m := *m
 		m.Images, m.Documents = slices.Clone(m.Images), slices.Clone(m.Documents)
@@ -440,13 +444,13 @@ func (a *app) deleteChat(id string) {
 func (a *app) saveChats() {
 	a.searchStale = true
 	if err := a.store.write("chats.json", a.chats); err != nil {
-		a.toast = "保存对话失败：" + err.Error()
+		a.toast = locales.SaveChatsFailed(err.Error())
 	}
 }
 
 func (a *app) saveSettings() {
 	if err := a.store.write("settings.json", a.settings); err != nil {
-		a.toast = "保存设置失败：" + err.Error()
+		a.toast = locales.SaveSettingsFailed(err.Error())
 	}
 }
 
@@ -454,6 +458,11 @@ func (a *app) saveSettings() {
 func (a *app) setTheme(s mygo.ThemeSource) {
 	a.settings.Theme = s
 	a.applyTheme(s)
+}
+
+func (a *app) setLanguage(tag string) {
+	a.settings.Language = tag
+	a.applyLanguage(tag)
 }
 
 // openSettings shows the settings, on the model chats use.

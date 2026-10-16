@@ -6,11 +6,15 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
+
+	"github.com/Qsnh/Murmur/locales"
 )
 
 // ResolveThinkStyle returns the style a request uses: style itself, or for
@@ -267,7 +271,7 @@ func httpError(resp *http.Response) error {
 	if msg == "" {
 		msg = http.StatusText(resp.StatusCode)
 	}
-	return fmt.Errorf("HTTP %d：%s", resp.StatusCode, msg)
+	return errors.New(locales.LlmHTTPError(strconv.Itoa(resp.StatusCode), msg))
 }
 
 const (

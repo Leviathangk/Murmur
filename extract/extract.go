@@ -10,6 +10,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/Qsnh/Murmur/locales"
 )
 
 // Kind is the kind of a document.
@@ -38,16 +40,16 @@ var Extensions = append([]string{"pdf", "docx", "xlsx", "pptx"}, TextExtensions.
 
 // unsupported says what to do with the files of extensions that look like
 // documents but are not read.
-var unsupported = map[string]string{
-	"doc":     "旧版 Word 文档请另存为 .docx 后再添加",
-	"wps":     "WPS 文档请另存为 .docx 后再添加",
-	"xls":     "旧版 Excel 表格请另存为 .xlsx 后再添加",
-	"et":      "WPS 表格请另存为 .xlsx 后再添加",
-	"ppt":     "旧版 PPT 请另存为 .pptx 后再添加",
-	"dps":     "WPS 演示请另存为 .pptx 后再添加",
-	"pages":   "请先在 Pages 里导出为 PDF 或 Word",
-	"numbers": "请先在 Numbers 里导出为 Excel",
-	"key":     "请先在 Keynote 里导出为 PDF 或 PowerPoint",
+var unsupported = map[string]func() string{
+	"doc":     locales.ExtractOldWord,
+	"wps":     locales.ExtractWPSWriter,
+	"xls":     locales.ExtractOldExcel,
+	"et":      locales.ExtractWPSSheet,
+	"ppt":     locales.ExtractOldPPT,
+	"dps":     locales.ExtractWPSSlides,
+	"pages":   locales.ExtractPages,
+	"numbers": locales.ExtractNumbers,
+	"key":     locales.ExtractKeynote,
 }
 
 // KindOf returns the kind of the document named name, by its extension:
@@ -70,13 +72,11 @@ func ext(name string) string {
 	return strings.ToLower(strings.TrimPrefix(filepath.Ext(name), "."))
 }
 
-var errEmpty = errors.New("没有读到文字")
-
 // Read returns the text of the document named name, of data: its first
 // max characters, and whether it had more.
 func Read(name string, data []byte, max int) (text string, more bool, err error) {
 	if hint, ok := unsupported[ext(name)]; ok {
-		return "", false, errors.New(hint)
+		return "", false, errors.New(hint())
 	}
 	// The text is kept in bytes until it is cleaned: four a character
 	// leaves room for any, and for the blank lines cleaning drops.
@@ -99,9 +99,9 @@ func Read(name string, data []byte, max int) (text string, more bool, err error)
 	text = clean(w.b.String())
 	if text == "" {
 		if KindOf(name) == PDF {
-			return "", false, errors.New("没有读到文字，可能是扫描件，请截图后作为图片发送")
+			return "", false, errors.New(locales.ExtractScanned())
 		}
-		return "", false, errEmpty
+		return "", false, errors.New(locales.ExtractEmpty())
 	}
 	more = w.cut
 	if utf8.RuneCountInString(text) > max {

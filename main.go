@@ -11,7 +11,6 @@ import (
 	"runtime"
 
 	"github.com/egoist/mygo"
-	_ "github.com/egoist/mygo/locales/zh-Hans"
 	"github.com/egoist/mygo/plugins/updater"
 	"github.com/egoist/mygo/ui"
 )
@@ -33,9 +32,7 @@ var version = func() string {
 var onReady func(a *app)
 
 func main() {
-	// The interface is in Chinese: MyGo's own controls and menus say
-	// theirs in Chinese too.
-	mygo.App.SetLanguages("zh-Hans")
+	mygo.App.SetLanguages("en", "zh-Hans", "zh-Hant")
 	// Murmur runs once: started again, as it stays running in the
 	// background, the running one shows its window (tray.go).
 	if !mygo.App.RequestSingleInstanceLock() {
@@ -48,6 +45,9 @@ func main() {
 	a := newApp(store{dir: dir})
 	// The app starts in the appearance chosen last.
 	mygo.Theme.SetSource(a.settings.Theme)
+	if a.settings.Language != "" {
+		mygo.App.SetLocale(a.settings.Language)
+	}
 	// A click on a notification shows its chat, also the click that
 	// launched the app (macOS), which comes before the window (notify.go).
 	mygo.App.OnNotificationClick(a.openNotified)
@@ -55,7 +55,9 @@ func main() {
 	// app menu of macOS checks at once too.
 	a.updates = useUpdates(a.settings.Proxy)
 	if runtime.GOOS == "darwin" {
-		mygo.App.SetMenu(mygo.NewMenu(appMenu(a.updates.Check)))
+		setAppMenu := func() { mygo.App.SetMenu(mygo.NewMenu(appMenu(a.updates.Check))) }
+		setAppMenu()
+		mygo.App.OnLocaleChanged(func(string) { setAppMenu() })
 	}
 	mygo.App.WhenReady(func() {
 		a.win = mygo.NewWindow(mygo.WindowOptions{

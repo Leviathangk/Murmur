@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -13,6 +12,8 @@ import (
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/option"
+
+	"github.com/Qsnh/Murmur/locales"
 )
 
 // claudeThinking is how a model of the Messages API thinks.
@@ -156,12 +157,12 @@ func streamAnthropic(ctx context.Context, client *http.Client, cfg Config, req R
 	if err := stream.Err(); err != nil {
 		var apiErr *anthropic.Error
 		if errors.As(err, &apiErr) {
-			return fmt.Errorf("HTTP %d：%s", apiErr.StatusCode, apiErrorMessage(apiErr))
+			return errors.New(locales.LlmHTTPError(strconv.Itoa(apiErr.StatusCode), apiErrorMessage(apiErr)))
 		}
 		return err
 	}
 	if refused {
-		return fmt.Errorf("模型拒绝回答这个请求")
+		return errors.New(locales.LlmRefused())
 	}
 	// What was read from the cache, or written to it, was read too.
 	in := usage.InputTokens + usage.CacheCreationInputTokens + usage.CacheReadInputTokens

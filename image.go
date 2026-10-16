@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
-	"fmt"
 	"image"
 	"image/color"
 	"image/draw"
@@ -14,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	_ "golang.org/x/image/bmp"
@@ -21,6 +21,8 @@ import (
 	_ "golang.org/x/image/webp"
 
 	"github.com/egoist/mygo/ui"
+
+	"github.com/Qsnh/Murmur/locales"
 )
 
 const (
@@ -135,14 +137,14 @@ func extension(mime string) string {
 func newImage(data []byte) (*Image, error) {
 	cfg, format, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil {
-		return nil, errors.New("不是支持的图片格式（PNG、JPEG、GIF、WebP、BMP）")
+		return nil, errors.New(locales.ImageUnsupported())
 	}
 	if cfg.Width*cfg.Height > maxImagePixels {
-		return nil, fmt.Errorf("图片太大（%d×%d）", cfg.Width, cfg.Height)
+		return nil, errors.New(locales.ImageTooLarge(strconv.Itoa(cfg.Width), strconv.Itoa(cfg.Height)))
 	}
 	img, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
-		return nil, errors.New("图片已损坏，无法读取")
+		return nil, errors.New(locales.ImageDamaged())
 	}
 	orientation := 0
 	if format == "jpeg" {
@@ -221,17 +223,17 @@ func (a *app) loadThumb(img *Image) {
 func readImage(path string) (*Image, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, errors.New("无法打开")
+		return nil, errors.New(locales.FileCannotOpen())
 	}
 	defer f.Close()
 	if st, err := f.Stat(); err != nil || st.IsDir() {
-		return nil, errors.New("不是图片")
+		return nil, errors.New(locales.FileNotImage())
 	} else if st.Size() > maxImageFile {
-		return nil, errors.New("文件太大")
+		return nil, errors.New(locales.FileTooLarge())
 	}
 	var buf bytes.Buffer
 	if _, err := buf.ReadFrom(f); err != nil {
-		return nil, errors.New("无法读取")
+		return nil, errors.New(locales.FileCannotRead())
 	}
 	return newImage(buf.Bytes())
 }

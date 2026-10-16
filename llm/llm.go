@@ -6,12 +6,15 @@ package llm
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/Qsnh/Murmur/locales"
 )
 
 // Protocol is the API a model is reached with.
@@ -114,7 +117,7 @@ type Usage struct {
 // tells its usage, if the provider does.
 func Stream(ctx context.Context, cfg Config, req Request, emit func(Event)) error {
 	if strings.TrimSpace(cfg.Model) == "" {
-		return fmt.Errorf("没有填写模型 ID")
+		return errors.New(locales.LlmNoModel())
 	}
 	client, err := httpClient(cfg.Proxy)
 	if err != nil {
@@ -122,7 +125,7 @@ func Stream(ctx context.Context, cfg Config, req Request, emit func(Event)) erro
 	}
 	req.Messages = normalize(req.Messages)
 	if len(req.Messages) == 0 {
-		return fmt.Errorf("没有可发送的消息")
+		return errors.New(locales.LlmNoMessages())
 	}
 	switch cfg.Protocol {
 	case Anthropic:
@@ -187,7 +190,7 @@ func ProxyURL(proxy string) (*url.URL, error) {
 	}
 	u, err := url.Parse(proxy)
 	if err != nil || u.Host == "" {
-		return nil, fmt.Errorf("代理地址无效：%s", proxy)
+		return nil, errors.New(locales.LlmInvalidProxy(proxy))
 	}
 	return u, nil
 }

@@ -2,15 +2,15 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/egoist/mygo/transfer"
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/markdown"
+
+	"github.com/Qsnh/Murmur/locales"
 )
 
 const (
@@ -64,13 +64,13 @@ func (a *app) view(c *ui.Context) {
 
 	// Beside the window controls, whether the sidebar shows or not.
 	ui.Row(c.Key("tools")).Absolute().Left(bar.Left + 8).Top((titleBarHeight - 30) / 2).Gap(2).Children(func() {
-		label := "隐藏侧边栏"
+		label := locales.SidebarHide()
 		if a.collapsed {
-			label = "显示侧边栏"
+			label = locales.SidebarShow()
 		}
 		iconButton(c.Key("sidebar"), sidebarIcon, label).OnClick(func() { a.collapsed = !a.collapsed })
 		if a.collapsed {
-			iconButton(c.Key("new"), newChatIcon, "新对话").OnClick(a.newChat)
+			iconButton(c.Key("new"), newChatIcon, locales.NewChat()).OnClick(a.newChat)
 		}
 	})
 
@@ -115,31 +115,31 @@ func (a *app) sidebar(c *ui.Context, vibrant bool) {
 	t := c.Theme()
 	ui.Row(c).Height(titleBarHeight).Shrink(0).AlignItems(ui.Center).Padding(0, 10, 0, 0).DragWindow().Children(func() {
 		ui.Spacer(c)
-		iconButton(c.Key("new"), newChatIcon, "新对话").OnClick(a.newChat)
+		iconButton(c.Key("new"), newChatIcon, locales.NewChat()).OnClick(a.newChat)
 	})
 	a.searchField(c)
 	searching := strings.TrimSpace(a.search) != ""
 	results := a.results()
 	switch {
 	case len(a.chats) == 0:
-		ui.Text(c, "还没有对话").FontSize(13).TextColor(t.TextMuted).Padding(8, 18)
+		ui.Text(c, locales.SidebarEmpty()).FontSize(13).TextColor(t.TextMuted).Padding(8, 18)
 		ui.Spacer(c)
 	case searching && len(results) == 0:
-		ui.Text(c, "没有找到相关对话").FontSize(13).TextColor(t.TextMuted).Padding(8, 18)
+		ui.Text(c, locales.SidebarNotFound()).FontSize(13).TextColor(t.TextMuted).Padding(8, 18)
 		ui.Spacer(c)
 	default:
 		deleted := ""
 		item := func(ch *Chat) ui.Element {
 			title := ch.Title
 			if title == "" {
-				title = "新对话"
+				title = locales.NewChat()
 			}
 			id := ch.ID
 			return ui.SidebarItem(c.Key(id), id, nil, title).ContextMenu(func(m *ui.Menu) { a.chatMenu(m, id, &deleted) })
 		}
 		list := ui.Sidebar(c, &a.selected, func() {
 			if searching {
-				ui.SidebarSection(c.Key("found"), fmt.Sprintf("找到 %d 个对话", len(results)), nil, func() {
+				ui.SidebarSection(c.Key("found"), locales.SidebarFound(len(results)), nil, func() {
 					for _, f := range results {
 						it := item(f.chat)
 						if f.snippet != "" {
@@ -160,7 +160,7 @@ func (a *app) sidebar(c *ui.Context, vibrant bool) {
 					}
 				})
 			}
-		}).Grow(1).Label("对话")
+		}).Grow(1).Label(locales.SidebarChats())
 		if vibrant {
 			list.Background(ui.Transparent)
 		}
@@ -175,13 +175,13 @@ func (a *app) sidebar(c *ui.Context, vibrant bool) {
 		}
 	}
 	ui.Box(c).Padding(8, 10, 10, 10).Shrink(0).Children(func() {
-		b := ui.ButtonBase(c.Key("settings")).Gap(8).Padding(7, 10).Radius(8).AlignItems(ui.Center).TextColor(t.TextMuted).Label("设置")
+		b := ui.ButtonBase(c.Key("settings")).Gap(8).Padding(7, 10).Radius(8).AlignItems(ui.Center).TextColor(t.TextMuted).Label(locales.Settings())
 		if b.Hovered() {
 			b.Background(t.SurfaceHover).TextColor(t.Text)
 		}
 		b.Children(func() {
 			ui.Icon(c, gearIcon).Size(16, 16)
-			ui.Text(c, "设置").FontSize(13)
+			ui.Text(c, locales.Settings()).FontSize(13)
 		})
 		b.OnClick(a.openSettings)
 	})
@@ -200,10 +200,10 @@ func (a *app) searchField(c *ui.Context) {
 		box.Children(func() {
 			ui.Icon(c, searchIcon).Size(14, 14).Shrink(0).TextColor(t.TextMuted)
 			ui.TextInputBase(c.Key("query"), &a.search).Bind(&a.searchInput).Grow(1).MinWidth(0).Padding(6, 0).FontSize(13).
-				Placeholder("搜索对话").Label("搜索对话").
+				Placeholder(locales.SearchChats()).Label(locales.SearchChats()).
 				OnShortcut(0, ui.KeyEscape, func() { a.search = "" })
 			if a.search != "" {
-				b := ui.ButtonBase(c.Key("clear")).Size(18, 18).Radius(9).Center().Shrink(0).TextColor(t.TextMuted).Label("清除搜索")
+				b := ui.ButtonBase(c.Key("clear")).Size(18, 18).Radius(9).Center().Shrink(0).TextColor(t.TextMuted).Label(locales.SearchClear())
 				if b.Hovered() {
 					b.Background(t.SurfaceHover).TextColor(t.Text)
 				}
@@ -230,14 +230,14 @@ func (a *app) showMatch(results []found) {
 // to the caller, through deleted, as it takes the chat out of a list that
 // may be being built.
 func (a *app) chatMenu(m *ui.Menu, id string, deleted *string) {
-	if m.Item("重命名…").Chosen() {
+	if m.Item(locales.ChatRename()).Chosen() {
 		a.startRename(id)
 	}
-	if m.Item("导出为 Markdown…").Chosen() {
+	if m.Item(locales.ChatExport()).Chosen() {
 		a.exportChat(id)
 	}
 	m.Separator()
-	if m.Item("删除对话").Chosen() {
+	if m.Item(locales.ChatDelete()).Chosen() {
 		*deleted = id
 	}
 }
@@ -254,11 +254,11 @@ func (a *app) renameDialog(c *ui.Context) {
 			a.rename(id, a.newTitle)
 			a.renameOpen = false
 		}
-		ui.Text(c, "重命名对话").FontSize(16).Bold()
-		ui.TextInput(c.Key("title"), &a.newTitle).Label("对话名称").Placeholder("对话名称").AutoFocus().OnSubmit(done)
+		ui.Text(c, locales.RenameTitle()).FontSize(16).Bold()
+		ui.TextInput(c.Key("title"), &a.newTitle).Label(locales.RenameField()).Placeholder(locales.RenameField()).AutoFocus().OnSubmit(done)
 		ui.Row(c).Gap(8).Justify(ui.End).Children(func() {
-			ui.Button(c.Key("cancel"), "取消").OnClick(func() { a.renameOpen = false })
-			ui.PrimaryButton(c.Key("save"), "保存").Disabled(strings.TrimSpace(a.newTitle) == "").OnClick(done)
+			ui.Button(c.Key("cancel"), locales.Cancel()).OnClick(func() { a.renameOpen = false })
+			ui.PrimaryButton(c.Key("save"), locales.Save()).Disabled(strings.TrimSpace(a.newTitle) == "").OnClick(done)
 		})
 	})
 }
@@ -278,10 +278,10 @@ func groupChats(chats []*Chat, now time.Time) []chatGroup {
 		title string
 		since time.Time
 	}{
-		{"今天", today},
-		{"昨天", today.AddDate(0, 0, -1)},
-		{"7 天内", today.AddDate(0, 0, -7)},
-		{"更早", time.Time{}},
+		{locales.SidebarToday(), today},
+		{locales.SidebarYesterday(), today.AddDate(0, 0, -1)},
+		{locales.SidebarWeek(), today.AddDate(0, 0, -7)},
+		{locales.SidebarEarlier(), time.Time{}},
 	}
 	var groups []chatGroup
 	for _, ch := range chats {
@@ -312,7 +312,7 @@ func (a *app) pane(c *ui.Context, titleLeft float32) {
 	col.Children(func() {
 		deleted := ""
 		ui.Row(c).Height(titleBarHeight).Shrink(0).AlignItems(ui.Center).Gap(8).Padding(0, bar.Right+12, 0, 20+titleLeft).DragWindow().Children(func() {
-			title := "新对话"
+			title := locales.NewChat()
 			if a.current != nil && a.current.Title != "" {
 				title = a.current.Title
 			}
@@ -320,7 +320,7 @@ func (a *app) pane(c *ui.Context, titleLeft float32) {
 			if ch := a.current; ch != nil {
 				ui.Spacer(c)
 				id := ch.ID
-				iconButton(c.Key("more"), moreIcon, "更多").Shrink(0).Menu(func(m *ui.Menu) { a.chatMenu(m, id, &deleted) })
+				iconButton(c.Key("more"), moreIcon, locales.More()).Shrink(0).Menu(func(m *ui.Menu) { a.chatMenu(m, id, &deleted) })
 			}
 		})
 		if deleted != "" {
@@ -340,11 +340,11 @@ func (a *app) welcome(c *ui.Context) {
 	t := c.Theme()
 	ui.Column(c).Grow(1).Center().Gap(14).Padding(24).Children(func() {
 		ui.Icon(c, logoIcon).Size(40, 40).TextColor(t.Accent)
-		ui.Text(c, "有什么可以帮你？").FontSize(24).Bold()
+		ui.Text(c, locales.WelcomeTitle()).FontSize(24).Bold()
 		if a.model() == nil {
-			ui.Text(c, "先添加一个模型：OpenAI、Claude、DeepSeek、通义千问、Ollama，或任何 OpenAI 兼容的接口。").
+			ui.Text(c, locales.WelcomeAddModel()).
 				TextColor(t.TextMuted).TextAlign(ui.Center).MaxWidth(420)
-			ui.PrimaryButton(c, "添加模型").OnClick(a.openSettings)
+			ui.PrimaryButton(c, locales.AddModel()).OnClick(a.openSettings)
 		}
 	})
 }
@@ -423,7 +423,7 @@ func (a *app) message(c *ui.Context, ch *Chat, i int) {
 			case m.streaming && m.Reasoning == "":
 				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 					ui.Spinner(c).Size(14, 14)
-					ui.Text(c, "正在等待回复…").FontSize(13).TextColor(t.TextMuted)
+					ui.Text(c, locales.ReplyWaiting()).FontSize(13).TextColor(t.TextMuted)
 				})
 			}
 			if m.Error != "" {
@@ -442,13 +442,13 @@ func (a *app) message(c *ui.Context, ch *Chat, i int) {
 // thinking shows the model's reasoning, which hides once it answers.
 func (a *app) thinking(c *ui.Context, m *Message) {
 	t := c.Theme()
-	label := "思考过程"
+	label := locales.ThinkingTitle()
 	switch {
 	case m.streaming && m.Content == "":
-		label = fmt.Sprintf("思考中… %s", seconds(time.Since(m.thinkStart).Milliseconds()))
+		label = locales.ThinkingNow(seconds(time.Since(m.thinkStart).Milliseconds()))
 		c.After(time.Second)
 	case m.ThinkMS > 0:
-		label = "已思考 " + seconds(m.ThinkMS)
+		label = locales.ThinkingDone(seconds(m.ThinkMS))
 	}
 	p := ui.CollapsibleBase(c.Key("think"), &m.thinkOpen)
 	p.Trigger.Gap(6).Padding(5, 10).Margin(0, 0, 0, -10).Radius(8).AlignItems(ui.Center).AlignSelf(ui.Start).TextColor(t.TextMuted)
@@ -471,9 +471,9 @@ func (a *app) thinking(c *ui.Context, m *Message) {
 func seconds(ms int64) string {
 	s := (ms + 500) / 1000
 	if s < 60 {
-		return fmt.Sprintf("%d 秒", max(s, 1))
+		return locales.DurationSeconds(int(max(s, 1)))
 	}
-	return fmt.Sprintf("%d 分 %d 秒", s/60, s%60)
+	return locales.DurationMinutes(int(s/60), int(s%60))
 }
 
 // actions are the buttons under a reply.
@@ -486,16 +486,16 @@ func (a *app) actions(c *ui.Context, ch *Chat, i int) {
 			a.copyButton(c, m.Content)
 		}
 		if p := pageOf(m); p != nil {
-			iconButton(c.Key("preview"), previewIcon, "预览网页").OnClick(func() { a.preview(*p) })
+			iconButton(c.Key("preview"), previewIcon, locales.ReplyPreviewPage()).OnClick(func() { a.preview(*p) })
 		}
 		if forkable(m) {
-			iconButton(c.Key("fork"), forkIcon, "从这里开新对话").OnClick(func() {
+			iconButton(c.Key("fork"), forkIcon, locales.ReplyFork()).OnClick(func() {
 				a.fork(ch, i)
 				a.draftInput.Focus(c)
 			})
 		}
 		if last {
-			iconButton(c.Key("retry"), retryIcon, "重新生成").OnClick(func() { a.regenerate(ch) })
+			iconButton(c.Key("retry"), retryIcon, locales.ReplyRegenerate()).OnClick(func() { a.regenerate(ch) })
 		}
 		if m.Model != "" {
 			ui.Text(c, m.Model).FontSize(12).TextColor(t.TextMuted).Margin(0, 0, 0, 6)
@@ -507,7 +507,7 @@ func (a *app) actions(c *ui.Context, ch *Chat, i int) {
 				left = 2
 			}
 			ui.Text(c, s).FontSize(12).TextColor(t.TextMuted).Margin(0, 0, 0, left).
-				Tooltip("输入包括系统提示词和之前的对话，输出包括思考过程")
+				Tooltip(locales.UsageTooltip())
 		}
 	})
 }
@@ -515,9 +515,9 @@ func (a *app) actions(c *ui.Context, ch *Chat, i int) {
 // copyButton puts text on the clipboard, as a message's is.
 func (a *app) copyButton(c *ui.Context, text string) ui.Element {
 	svc := c.Services()
-	return iconButton(c.Key("copy"), copyIcon, "复制").OnClick(func() {
+	return iconButton(c.Key("copy"), copyIcon, locales.Copy()).OnClick(func() {
 		svc.WriteClipboard(text)
-		a.toast = "已复制"
+		a.toast = locales.Copied()
 	})
 }
 
@@ -526,24 +526,15 @@ func (a *app) copyButton(c *ui.Context, text string) ui.Element {
 func usageLabel(m *Message) string {
 	var parts []string
 	if m.InputTokens > 0 {
-		parts = append(parts, "输入 "+thousands(m.InputTokens))
+		parts = append(parts, locales.UsageInput(m.InputTokens))
 	}
 	if m.OutputTokens > 0 {
-		parts = append(parts, "输出 "+thousands(m.OutputTokens))
+		parts = append(parts, locales.UsageOutput(m.OutputTokens))
 	}
 	if len(parts) == 0 {
 		return ""
 	}
-	return strings.Join(parts, " · ") + " tokens"
-}
-
-// thousands writes n, not negative, with commas between its thousands.
-func thousands(n int) string {
-	s := strconv.Itoa(n)
-	for i := len(s) - 3; i > 0; i -= 3 {
-		s = s[:i] + "," + s[i:]
-	}
-	return s
+	return locales.UsageTokens(strings.Join(parts, " · "))
 }
 
 // composer is where the user writes, with the documents and images
@@ -567,7 +558,7 @@ func (a *app) composer(c *ui.Context, dragOver bool) {
 				a.attachments(c)
 			}
 			ui.TextAreaBase(c.Key("draft"), &a.draft).Bind(&a.draftInput).Lines(1, 10).Padding(4, 4, 4, 0).
-				Placeholder("给 Murmur 发消息，Enter 发送，Shift+Enter 换行").Label("消息").AutoFocus().
+				Placeholder(locales.ComposerPlaceholder()).Label(locales.ComposerLabel()).AutoFocus().
 				OnPaste(func(text string) bool { return a.paste(svc, text) }).
 				OnTextKey(func(k ui.TextKey) bool {
 					if k.Key != ui.KeyEnter || k.Mods != 0 {
@@ -581,7 +572,7 @@ func (a *app) composer(c *ui.Context, dragOver bool) {
 						return true
 					}
 					if a.model() == nil {
-						a.toast = "请先添加一个模型"
+						a.toast = locales.AddModelFirst()
 						a.openSettings()
 						return true
 					}
@@ -590,13 +581,13 @@ func (a *app) composer(c *ui.Context, dragOver bool) {
 					return true
 				})
 			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-				iconButton(c.Key("attach"), clipIcon, "添加图片或文件").OnClick(a.pickFiles)
+				iconButton(c.Key("attach"), clipIcon, locales.ComposerAttach()).OnClick(a.pickFiles)
 				a.modelPicker(c)
 				a.thinkToggle(c)
 				ui.Spacer(c)
 				b := ui.ButtonBase(c.Key("send")).Size(32, 32).Radius(16).Center()
 				if busy {
-					b.Background(t.Text).TextColor(t.Background).Label("停止").Tooltip("停止生成")
+					b.Background(t.Text).TextColor(t.Background).Label(locales.ComposerStop()).Tooltip(locales.ComposerStopTooltip())
 					b.Children(func() { ui.Icon(c, stopIcon).Size(16, 16) })
 					b.OnClick(func() { a.stop(ch) })
 					return
@@ -607,7 +598,7 @@ func (a *app) composer(c *ui.Context, dragOver bool) {
 				} else {
 					b.Background(t.Text).TextColor(t.Background)
 				}
-				b.Disabled(empty).Label("发送").Tooltip("发送")
+				b.Disabled(empty).Label(locales.ComposerSend()).Tooltip(locales.ComposerSend())
 				b.Children(func() { ui.Icon(c, arrowUpIcon).Size(16, 16) })
 				b.OnClick(func() { a.send(a.draft) })
 			})
@@ -624,7 +615,7 @@ func (a *app) attachments(c *ui.Context) {
 			ui.Box(c.Key(doc.key)).Children(func() {
 				a.documentCard(c.Key("document"), doc).Padding(8, 34, 8, 8)
 				b := ui.ButtonBase(c.Key("remove")).Absolute().Top(18).Right(8).Size(20, 20).Radius(10).Center().
-					TextColor(t.TextMuted).Label("移除文件").Tooltip("移除")
+					TextColor(t.TextMuted).Label(locales.AttachmentRemoveFile()).Tooltip(locales.Remove())
 				if b.Hovered() {
 					b.Background(t.Border).TextColor(t.Text)
 				}
@@ -636,7 +627,7 @@ func (a *app) attachments(c *ui.Context) {
 			ui.Box(c.Key(img)).Size(64, 64).Children(func() {
 				a.thumbnail(c.Key("image"), img, 64, 64)
 				b := ui.ButtonBase(c.Key("remove")).Absolute().Top(4).Right(4).Size(20, 20).Radius(10).Center().
-					Background(ui.RGBA(0, 0, 0, 0.6)).TextColor(ui.RGB(255, 255, 255)).Label("移除图片").Tooltip("移除")
+					Background(ui.RGBA(0, 0, 0, 0.6)).TextColor(ui.RGB(255, 255, 255)).Label(locales.AttachmentRemoveImage()).Tooltip(locales.Remove())
 				if b.Hovered() {
 					b.Background(ui.RGBA(0, 0, 0, 0.8))
 				}
@@ -669,7 +660,7 @@ func shownSize(img *Image, n int) (float32, float32) {
 // thumbnail shows img at w×h, cropped to fill it, and large when clicked.
 func (a *app) thumbnail(c *ui.Context, img *Image, w, h float32) {
 	t := c.Theme()
-	b := ui.ButtonBase(c).Size(w, h).Radius(10).Background(t.Surface).Center().Label("查看图片")
+	b := ui.ButtonBase(c).Size(w, h).Radius(10).Background(t.Surface).Center().Label(locales.ImageView())
 	b.Children(func() {
 		switch {
 		case img.thumb != nil:
@@ -684,7 +675,7 @@ func (a *app) thumbnail(c *ui.Context, img *Image, w, h float32) {
 		}
 	})
 	if img.missing {
-		b.Label("图片已丢失").Tooltip("图片文件已不存在")
+		b.Label(locales.ImageMissing()).Tooltip(locales.ImageGone())
 		return
 	}
 	b.OnClick(func() { a.showImage(img) })
@@ -732,7 +723,7 @@ func (a *app) imageViewer(c *ui.Context) {
 		}
 		ww, wh := c.Size()
 		scale := min(1, (ww-64)/w, (wh-64)/h)
-		b := ui.ButtonBase(c.Key("image")).Label("关闭图片")
+		b := ui.ButtonBase(c.Key("image")).Label(locales.ImageClose())
 		b.Children(func() { ui.Image(c, bm).Size(w*scale, h*scale).Radius(6) })
 		b.OnClick(func() { a.viewOpen = false })
 	})
@@ -772,19 +763,19 @@ func (a *app) modelPicker(c *ui.Context) {
 	t := c.Theme()
 	m := a.model()
 	if m == nil {
-		b := ui.ButtonBase(c.Key("add-model")).Gap(4).Padding(5, 8).Radius(8).AlignItems(ui.Center).TextColor(t.Accent).Label("添加模型")
+		b := ui.ButtonBase(c.Key("add-model")).Gap(4).Padding(5, 8).Radius(8).AlignItems(ui.Center).TextColor(t.Accent).Label(locales.AddModel())
 		if b.Hovered() {
 			b.Background(t.SurfaceHover)
 		}
 		b.Children(func() {
 			ui.Icon(c, plusIcon).Size(14, 14)
-			ui.Text(c, "添加模型").FontSize(13)
+			ui.Text(c, locales.AddModel()).FontSize(13)
 		})
 		b.OnClick(a.openSettings)
 		return
 	}
 	sel := ui.SelectBase(c.Key("model"), &a.settings.Current)
-	sel.Trigger.Gap(4).Padding(5, 8).Radius(8).AlignItems(ui.Center).TextColor(t.TextMuted).Label("模型").Tooltip("选择模型")
+	sel.Trigger.Gap(4).Padding(5, 8).Radius(8).AlignItems(ui.Center).TextColor(t.TextMuted).Label(locales.ComposerModel()).Tooltip(locales.ComposerModelTooltip())
 	if sel.Trigger.Hovered() || sel.Open() {
 		sel.Trigger.Background(t.SurfaceHover).TextColor(t.Text)
 	}
@@ -826,7 +817,7 @@ func menuPanel(c *ui.Context, panel ui.Element) ui.Element {
 func (a *app) thinkToggle(c *ui.Context) {
 	t := c.Theme()
 	tg := ui.ToggleBase(c.Key("thinking"), &a.settings.Thinking).Gap(5).Padding(4, 10).Radius(999).AlignItems(ui.Center).
-		Label("深度思考").Tooltip("让模型先思考再回答")
+		Label(locales.ComposerThinking()).Tooltip(locales.ComposerThinkingTooltip())
 	if a.settings.Thinking {
 		tg.Background(t.Accent.Alpha(0.12)).TextColor(t.Accent).Border(1, t.Accent.Alpha(0.35))
 	} else {
@@ -837,7 +828,7 @@ func (a *app) thinkToggle(c *ui.Context) {
 	}
 	tg.Children(func() {
 		ui.Icon(c, bulbIcon).Size(14, 14)
-		ui.Text(c, "深度思考").FontSize(13)
+		ui.Text(c, locales.ComposerThinking()).FontSize(13)
 	})
 }
 

@@ -6,7 +6,6 @@ import (
 	"encoding/csv"
 	"encoding/xml"
 	"errors"
-	"fmt"
 	"io"
 	"math"
 	"path"
@@ -15,9 +14,11 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Qsnh/Murmur/locales"
 )
 
-var errDamaged = errors.New("文件已损坏，无法读取")
+func errDamaged() error { return errors.New(locales.ExtractDamaged()) }
 
 // maxPart is the most bytes a part of an Office file unpacks to: a file
 // packed to bomb its reader is not read whole.
@@ -29,7 +30,7 @@ type office struct{ files map[string]*zip.File }
 func openOffice(data []byte) (*office, error) {
 	z, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
-		return nil, errDamaged
+		return nil, errDamaged()
 	}
 	o := &office{files: map[string]*zip.File{}}
 	for _, f := range z.File {
@@ -112,7 +113,7 @@ func readDocx(w *writer, data []byte) error {
 	d, done := o.open("word/document.xml")
 	defer done()
 	if d == nil {
-		return errDamaged
+		return errDamaged()
 	}
 	headings := docxHeadings(o)
 
@@ -155,7 +156,7 @@ func readDocx(w *writer, data []byte) error {
 			break
 		}
 		if err != nil {
-			return errDamaged
+			return errDamaged()
 		}
 		switch t := tok.(type) {
 		case xml.StartElement:
@@ -319,7 +320,7 @@ func readPptx(w *writer, data []byte) error {
 	}
 	slides := pptxSlides(o)
 	if len(slides) == 0 {
-		return errDamaged
+		return errDamaged()
 	}
 	for i, name := range slides {
 		if w.full() {
@@ -367,7 +368,7 @@ func readPptx(w *writer, data []byte) error {
 			}
 		}
 		done()
-		w.WriteString(fmt.Sprintf("## 第 %d 页\n\n", i+1))
+		w.WriteString("## " + locales.ExtractSlide(i+1) + "\n\n")
 		if len(paras) > 0 {
 			w.WriteString(strings.Join(paras, "\n") + "\n\n")
 		}
@@ -429,7 +430,7 @@ func readXlsx(w *writer, data []byte) error {
 	d, done := o.open(book)
 	if d == nil {
 		done()
-		return errDamaged
+		return errDamaged()
 	}
 	for {
 		tok, err := d.Token()

@@ -10,9 +10,11 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/egoist/mygo/i18n"
 	"github.com/egoist/mygo/ui"
 
 	"github.com/Qsnh/Murmur/extract"
+	"github.com/Qsnh/Murmur/locales"
 )
 
 const (
@@ -113,17 +115,17 @@ func (s store) checkDocuments(chats []*Chat) {
 func readDocument(path string) (*Document, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, errors.New("无法打开")
+		return nil, errors.New(locales.FileCannotOpen())
 	}
 	defer f.Close()
 	if st, err := f.Stat(); err != nil || st.IsDir() {
-		return nil, errors.New("不是文件")
+		return nil, errors.New(locales.FileNotFile())
 	} else if st.Size() > maxDocumentFile {
-		return nil, errors.New("文件太大")
+		return nil, errors.New(locales.FileTooLarge())
 	}
 	data, err := io.ReadAll(f)
 	if err != nil {
-		return nil, errors.New("无法读取")
+		return nil, errors.New(locales.FileCannotRead())
 	}
 	name := filepath.Base(path)
 	text, cut, err := extract.Read(name, data, maxDocumentChars)
@@ -151,7 +153,7 @@ func (a *app) detachDocument(i int) {
 // so when the file was longer.
 func sentText(src documentSource, text string) string {
 	if src.cut {
-		text += fmt.Sprintf("\n\n（文件过长，只发送了开头的 %d 字）", maxDocumentChars)
+		text += "\n\n" + locales.DocumentSentCut(maxDocumentChars)
 	}
 	return text
 }
@@ -172,28 +174,28 @@ func documentKind(name string, t *ui.Theme) (string, ui.Color) {
 	if ext := strings.TrimPrefix(filepath.Ext(name), "."); ext != "" && len(ext) <= 8 {
 		return strings.ToUpper(ext), t.TextMuted
 	}
-	return "文本", t.TextMuted
+	return locales.DocumentText(), t.TextMuted
 }
 
 // documentMeta says what doc is and how long, as its card does.
 func documentMeta(doc *Document, t *ui.Theme) string {
 	if doc.missing {
-		return "文件已丢失"
+		return locales.DocumentMissing()
 	}
 	kind, _ := documentKind(doc.Name, t)
 	if doc.Cut {
-		return kind + " · 只发送前 " + characters(maxDocumentChars)
+		return locales.DocumentCut(kind, characters(maxDocumentChars))
 	}
 	return kind + " · " + characters(doc.Chars)
 }
 
 // characters says how many characters n is: 1,234 字, or 1.2 万字.
 func characters(n int) string {
-	if n < 10000 {
-		return thousands(n) + " 字"
+	if n < 10000 || i18n.Base(i18n.Locale()) != "zh" {
+		return locales.Characters(n)
 	}
 	s := fmt.Sprintf("%.1f", float64(n)/10000)
-	return strings.TrimSuffix(s, ".0") + " 万字"
+	return locales.CharactersTenThousands(strings.TrimSuffix(s, ".0"))
 }
 
 // documentCard shows doc: its kind, name and length; a click shows its
@@ -206,7 +208,7 @@ func (a *app) documentCard(c *ui.Context, doc *Document) ui.Element {
 		color, icon = t.TextMuted, noFileIcon
 	}
 	b := ui.ButtonBase(c).Width(documentWidth).Height(56).Padding(8, 12, 8, 8).Gap(10).Radius(12).AlignItems(ui.Center).
-		Background(t.Surface).Label("查看文件：" + doc.Name)
+		Background(t.Surface).Label(locales.DocumentView(doc.Name))
 	if b.Hovered() && !doc.missing {
 		b.Background(t.SurfaceHover)
 	}
@@ -220,7 +222,7 @@ func (a *app) documentCard(c *ui.Context, doc *Document) ui.Element {
 		})
 	})
 	if doc.missing {
-		b.Label("文件已丢失：" + doc.Name).Tooltip("文件已不存在")
+		b.Label(locales.DocumentMissingName(doc.Name)).Tooltip(locales.DocumentGone())
 		return b
 	}
 	b.OnClick(func() { a.showDocument(doc) })
@@ -239,7 +241,7 @@ func (a *app) showDocument(doc *Document) {
 			}
 			if err != nil {
 				a.readOpen, doc.missing = false, true
-				a.toast = "文件已丢失"
+				a.toast = locales.DocumentMissing()
 				return
 			}
 			if r := []rune(text); len(r) > maxPreviewChars {
@@ -265,13 +267,13 @@ func (a *app) documentViewer(c *ui.Context) {
 		ui.Row(c).Gap(10).AlignItems(ui.Center).Padding(0, 12, 0, 0).Children(func() {
 			ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(2).Children(func() {
 				ui.Text(c, doc.Name).FontSize(15).Bold().SingleLine()
-				meta := documentMeta(doc, t) + "，以下是发送给模型的文字"
+				meta := locales.DocumentViewerNote(documentMeta(doc, t))
 				if doc.Chars > maxPreviewChars {
-					meta += "，预览只显示前 " + characters(maxPreviewChars)
+					meta = locales.DocumentViewerNotePreview(documentMeta(doc, t), characters(maxPreviewChars))
 				}
 				ui.Text(c, meta).FontSize(12).TextColor(t.TextMuted)
 			})
-			iconButton(c.Key("close"), closeIcon, "关闭").Shrink(0).OnClick(func() { a.readOpen = false })
+			iconButton(c.Key("close"), closeIcon, locales.Close()).Shrink(0).OnClick(func() { a.readOpen = false })
 		})
 		if !a.readLoaded {
 			ui.Row(c).Height(120).Center().Children(func() { ui.Spinner(c).Size(20, 20) })

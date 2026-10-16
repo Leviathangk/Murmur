@@ -221,4 +221,14 @@ func TestCharacters(t *testing.T) {
 			t.Errorf("characters(%d) = %q, want %q", n, got, want)
 		}
 	}
+	t.Setenv("MYGO_LOCALE", "zh-Hant")
+	if got := characters(12345); got != "1.2 萬字" {
+		t.Errorf("characters(12345) in zh-Hant = %q", got)
+	}
+	t.Setenv("MYGO_LOCALE", "en")
+	for n, want := range map[int]string{1: "1 character", 12345: "12,345 characters", 100000: "100,000 characters"} {
+		if got := characters(n); got != want {
+			t.Errorf("characters(%d) = %q, want %q", n, got, want)
+		}
+	}
 }

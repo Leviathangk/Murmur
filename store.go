@@ -15,6 +15,7 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"github.com/Qsnh/Murmur/llm"
+	"github.com/Qsnh/Murmur/locales"
 )
 
 // Model is a model the user added: where it is, and how to call it.
@@ -37,7 +38,7 @@ func (m *Model) label() string {
 	if s := strings.TrimSpace(m.Model); s != "" {
 		return s
 	}
-	return "未命名模型"
+	return locales.ModelUntitled()
 }
 
 // config returns how to call the model, through proxy.
@@ -61,7 +62,8 @@ type Settings struct {
 	SystemPrompt string   `json:"system_prompt"`
 	Proxy        string   `json:"proxy"`
 	// Theme is the appearance chosen; empty follows the system.
-	Theme mygo.ThemeSource `json:"theme,omitempty"`
+	Theme    mygo.ThemeSource `json:"theme,omitempty"`
+	Language string           `json:"language,omitempty"`
 	// Notify tells of the replies that come while the window is not in
 	// front, in system notifications.
 	Notify bool `json:"notify"`

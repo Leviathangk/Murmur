@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -10,6 +9,7 @@ import (
 	"github.com/egoist/mygo"
 
 	"github.com/Qsnh/Murmur/extract"
+	"github.com/Qsnh/Murmur/locales"
 )
 
 // attachFiles adds the images and documents in the files at paths to the
@@ -28,7 +28,7 @@ func (a *app) attachFiles(paths []string) {
 			if isImageFile(p) {
 				img, err := readImage(p)
 				if err != nil {
-					errs = append(errs, filepath.Base(p)+"："+err.Error())
+					errs = append(errs, locales.AttachFileError(filepath.Base(p), err.Error()))
 					continue
 				}
 				imgs = append(imgs, img)
@@ -36,7 +36,7 @@ func (a *app) attachFiles(paths []string) {
 			}
 			doc, err := readDocument(p)
 			if err != nil {
-				errs = append(errs, filepath.Base(p)+"："+err.Error())
+				errs = append(errs, locales.AttachFileError(filepath.Base(p), err.Error()))
 				continue
 			}
 			docs = append(docs, doc)
@@ -53,11 +53,11 @@ func (a *app) attachFiles(paths []string) {
 func (a *app) attach(imgs []*Image, docs []*Document, errs []string) {
 	if room := maxImages - len(a.pending); len(imgs) > room {
 		imgs = imgs[:max(room, 0)]
-		errs = append(errs, fmt.Sprintf("一条消息最多 %d 张图片", maxImages))
+		errs = append(errs, locales.AttachTooManyImages(maxImages))
 	}
 	if room := maxDocuments - len(a.pendingDocs); len(docs) > room {
 		docs = docs[:max(room, 0)]
-		errs = append(errs, fmt.Sprintf("一条消息最多 %d 个文件", maxDocuments))
+		errs = append(errs, locales.AttachTooManyDocuments(maxDocuments))
 	}
 	for _, doc := range docs {
 		doc.key = a.newKey()
@@ -66,15 +66,15 @@ func (a *app) attach(imgs []*Image, docs []*Document, errs []string) {
 	a.pendingDocs = append(a.pendingDocs, docs...)
 	var said []string
 	if len(errs) > 0 {
-		said = append(said, "没有添加："+strings.Join(errs, "；"))
+		said = append(said, locales.AttachSkipped(strings.Join(errs, locales.AttachSkippedSeparator())))
 	}
 	for _, doc := range docs {
 		if doc.Cut {
-			said = append(said, "「"+doc.Name+"」太长，只发送开头的 "+characters(maxDocumentChars))
+			said = append(said, locales.AttachTooLong(doc.Name, characters(maxDocumentChars)))
 		}
 	}
 	if len(said) > 0 {
-		a.toast = strings.Join(said, "。")
+		a.toast = strings.Join(said, locales.ToastSeparator())
 	}
 }
 
@@ -85,7 +85,7 @@ func (a *app) pickFiles() {
 		paths, err := a.openFiles()
 		a.update(func() {
 			if err != nil {
-				a.toast = "无法打开文件选择框：" + err.Error()
+				a.toast = locales.OpenDialogFailed(err.Error())
 				return
 			}
 			a.attachFiles(paths)
@@ -98,12 +98,12 @@ func (a *app) pickFiles() {
 func (a *app) openFilesDialog() ([]string, error) {
 	return mygo.Dialog.Open(mygo.OpenDialogOptions{
 		Parent:      a.win,
-		Title:       "选择图片或文件",
-		ButtonLabel: "添加",
+		Title:       locales.OpenDialogTitle(),
+		ButtonLabel: locales.OpenDialogButton(),
 		Filters: []mygo.FileFilter{
-			{Name: "图片和文件", Extensions: slices.Concat(imageExtensions, extract.Extensions)},
-			{Name: "图片", Extensions: imageExtensions},
-			{Name: "文件", Extensions: extract.Extensions},
+			{Name: locales.OpenDialogImagesAndFiles(), Extensions: slices.Concat(imageExtensions, extract.Extensions)},
+			{Name: locales.OpenDialogImages(), Extensions: imageExtensions},
+			{Name: locales.OpenDialogFiles(), Extensions: extract.Extensions},
 		},
 		Multiple: true,
 	})

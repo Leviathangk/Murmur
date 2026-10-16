@@ -6,6 +6,8 @@ import (
 	"runtime"
 
 	"github.com/egoist/mygo"
+
+	"github.com/Qsnh/Murmur/locales"
 )
 
 // Murmur keeps running when its window is closed, until it is quit: closing
@@ -27,10 +29,10 @@ var trayWindows []byte
 // updates, or quit.
 func trayMenu(open, check func()) []*mygo.MenuItem {
 	return []*mygo.MenuItem{
-		{Label: "打开 Murmur", Click: func(*mygo.MenuItem, *mygo.Window) { open() }},
+		{Label: locales.TrayOpen(), Click: func(*mygo.MenuItem, *mygo.Window) { open() }},
 		checkMenuItem(check),
 		mygo.Separator(),
-		{Label: "退出 Murmur", Role: mygo.RoleQuit},
+		{Label: locales.TrayQuit(), Role: mygo.RoleQuit},
 	}
 }
 
@@ -38,8 +40,8 @@ func trayMenu(open, check func()) []*mygo.MenuItem {
 // running when the window is closed. Without a tray, closing the window
 // quits as before, as nothing could open it again.
 func (a *app) stayInBackground() {
-	menu := mygo.NewMenu(trayMenu(a.showWindow, a.updates.Check))
-	opts := mygo.TrayOptions{Icon: trayWindows, ToolTip: "Murmur", Menu: menu}
+	menu := func() *mygo.Menu { return mygo.NewMenu(trayMenu(a.showWindow, a.updates.Check)) }
+	opts := mygo.TrayOptions{Icon: trayWindows, ToolTip: "Murmur", Menu: menu()}
 	if runtime.GOOS == "darwin" {
 		opts.Icon, opts.IconIsTemplate = trayMacOS, true
 	}
@@ -57,10 +59,12 @@ func (a *app) stayInBackground() {
 	if windows {
 		tray.OnClick(a.showWindow)
 		tray.OnRightClick(func() {
-			tray.SetMenu(menu)
+			tray.SetMenu(menu())
 			tray.PopUpMenu()
 			tray.SetMenu(nil)
 		})
+	} else {
+		mygo.App.OnLocaleChanged(func(string) { tray.SetMenu(menu()) })
 	}
 
 	quitting := false

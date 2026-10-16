@@ -233,14 +233,6 @@ func TestStreamingInPlace(t *testing.T) {
 	}
 }
 
-func TestThousands(t *testing.T) {
-	for n, want := range map[int]string{0: "0", 7: "7", 999: "999", 1000: "1,000", 12345: "12,345", 1234567: "1,234,567"} {
-		if got := thousands(n); got != want {
-			t.Errorf("%d: %q, want %q", n, got, want)
-		}
-	}
-}
-
 func TestErrorAndRetry(t *testing.T) {
 	a, reqs := testApp(t)
 	a.addModel(presets[0])

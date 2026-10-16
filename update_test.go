@@ -134,8 +134,21 @@ func TestCheckedLabel(t *testing.T) {
 		{time.Time{}, ""},
 		{now.Add(-time.Hour), "上次检查：今天 08:30"},
 		{time.Date(2026, 10, 14, 23, 5, 0, 0, time.Local), "上次检查：昨天 23:05"},
-		{time.Date(2026, 3, 2, 14, 0, 0, 0, time.Local), "上次检查：3 月 2 日 14:00"},
-		{time.Date(2025, 12, 31, 14, 0, 0, 0, time.Local), "上次检查：2025 年 12 月 31 日"},
+		{time.Date(2026, 3, 2, 14, 0, 0, 0, time.Local), "上次检查：3月2日 14:00"},
+		{time.Date(2025, 12, 31, 14, 0, 0, 0, time.Local), "上次检查：2025年12月31日"},
+	} {
+		if got := checkedLabel(tc.t, now); got != tc.want {
+			t.Errorf("checkedLabel(%v) = %q, want %q", tc.t, got, tc.want)
+		}
+	}
+	t.Setenv("MYGO_LOCALE", "en")
+	for _, tc := range []struct {
+		t    time.Time
+		want string
+	}{
+		{now.Add(-time.Hour), "Last checked today at 8:30 AM"},
+		{time.Date(2026, 3, 2, 14, 0, 0, 0, time.Local), "Last checked Mar 2 at 2:00 PM"},
+		{time.Date(2025, 12, 31, 14, 0, 0, 0, time.Local), "Last checked Dec 31, 2025"},
 	} {
 		if got := checkedLabel(tc.t, now); got != tc.want {
 			t.Errorf("checkedLabel(%v) = %q, want %q", tc.t, got, tc.want)

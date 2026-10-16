@@ -13,6 +13,7 @@ import (
 	"github.com/egoist/mygo/plugins/updater/native"
 
 	"github.com/Qsnh/Murmur/llm"
+	"github.com/Qsnh/Murmur/locales"
 )
 
 // Murmur updates itself from its releases on GitHub, as the updates of
@@ -45,11 +46,11 @@ type updates interface {
 
 // useUpdates sets up the update window before the app runs, once, as
 // mygo.Use takes a plugin once, and returns it: it checks in the
-// background once the app is ready, in Chinese as the app speaks, through
+// background once the app is ready, in the language the app shows, through
 // proxy, the proxy of the settings.
 func useUpdates(proxy string) updates {
 	setUpUpdates.Do(func() {
-		mygo.Use(native.New(updater.Options{Language: "zh-Hans", Strings: updateStrings}))
+		mygo.Use(native.New(updater.Options{Strings: updateStrings()}))
 		go updatesEnabled() // off the main thread, which the settings ask on
 	})
 	proxyUpdates()
@@ -63,8 +64,12 @@ var setUpUpdates sync.Once
 // own way: an app that cannot write where it is was opened from the disk
 // image or the Downloads folder, or by a user who is not an administrator,
 // rather than installed by a package manager.
-var updateStrings = map[string]updater.Strings{
-	"zh-Hans": {UnavailableMessage: "%[1]s 没有权限写入它所在的文件夹，无法自动更新。在 macOS 上，请把 %[1]s 拖进「应用程序」文件夹，再从那里打开；已经在里面的话，可能是当前账户不是管理员，请到 GitHub 下载新版本手动安装。"},
+func updateStrings() map[string]updater.Strings {
+	out := map[string]updater.Strings{}
+	for _, tag := range languages {
+		out[tag] = updater.Strings{UnavailableMessage: locales.In(tag).UpdatesUnwritableWindow("%[1]s")}
+	}
+	return out
 }
 
 // updateWindow is the update window of useUpdates.
@@ -118,19 +123,19 @@ func checkedLabel(t, now time.Time) string {
 	}
 	switch today := day(now); {
 	case day(t).Equal(today):
-		return "上次检查：今天 " + t.Format("15:04")
+		return locales.UpdatesCheckedToday(t)
 	case day(t).Equal(today.AddDate(0, 0, -1)):
-		return "上次检查：昨天 " + t.Format("15:04")
+		return locales.UpdatesCheckedYesterday(t)
 	case t.Year() == now.Year():
-		return "上次检查：" + t.Format("1 月 2 日 15:04")
+		return locales.UpdatesCheckedThisYear(t)
 	default:
-		return "上次检查：" + t.Format("2006 年 1 月 2 日")
+		return locales.UpdatesCheckedEarlier(t)
 	}
 }
 
 // checkMenuItem is the menu item that checks for updates at once.
 func checkMenuItem(check func()) *mygo.MenuItem {
-	return &mygo.MenuItem{Label: "检查更新…", Click: func(*mygo.MenuItem, *mygo.Window) { check() }}
+	return &mygo.MenuItem{Label: locales.UpdatesCheckMenu(), Click: func(*mygo.MenuItem, *mygo.Window) { check() }}
 }
 
 // appMenu is the menu bar of macOS: MyGo's default one, with an item that
