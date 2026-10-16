@@ -348,16 +348,26 @@ func (a *app) welcome(c *ui.Context) {
 	})
 }
 
+// messagesBottom is the room below the last message in the list.
+const messagesBottom = 28
+
 // messages is the list of the messages of ch, which follows its end as a
 // reply comes in.
 func (a *app) messages(c *ui.Context, ch *Chat) {
 	st := &ch.list
 	st.Key = func(i int) any { return ch.Messages[i].key }
 	st.FollowEnd = true
-	st.FollowAnimation = &ui.Smooth
+	// The end glides into view only once the messages reach the bottom of
+	// the list. MyGo glides the rows by as much as the end moved down even
+	// while they fit and the list does not scroll, so that they moved down
+	// and back up with each line of a reply (#1).
+	st.FollowAnimation = nil
+	if list, end := st.Bounds(c), ch.end.Bounds(c); end.H > 0 && end.Y+end.H >= list.Y+list.H-messagesBottom-0.5 {
+		st.FollowAnimation = &ui.Smooth
+	}
 	ui.List(c.Key(ch.ID), st, len(ch.Messages), func(i int) {
 		a.message(c, ch, i)
-	}).Grow(1).Padding(8, 24, 28, 24).Gap(28)
+	}).Grow(1).Padding(8, 24, messagesBottom, 24).Gap(28)
 }
 
 // message builds message i of ch: the user's in a bubble on the right,
@@ -367,6 +377,9 @@ func (a *app) message(c *ui.Context, ch *Chat, i int) {
 	t := c.Theme()
 	m := ch.Messages[i]
 	col := ui.Column(c).FillWidth().MaxWidth(contentWidth).Margin(0, ui.Auto).Gap(8)
+	if i == len(ch.Messages)-1 {
+		col.Bind(&ch.end)
+	}
 	col.Children(func() {
 		if m.Role == "user" {
 			if len(m.Documents) > 0 {

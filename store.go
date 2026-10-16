@@ -107,6 +107,7 @@ type Chat struct {
 	Messages []*Message `json:"messages"`
 
 	list   ui.ListState
+	end    ui.Handle          // the last message, to tell whether the messages fill the list
 	cancel context.CancelFunc // stops the reply coming, if any
 }
 

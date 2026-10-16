@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"image"
 	"image/png"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -191,6 +193,43 @@ func TestUsage(t *testing.T) {
 		if strings.HasSuffix(s, " tokens") {
 			t.Errorf("usage %q shown", s)
 		}
+	}
+}
+
+// While the chat fits in the window, a reply coming in moves nothing: the
+// list has nowhere to scroll, so the messages stay where they are as it
+// grows, rather than move down and back with each line (#1). Once the chat
+// outgrows the window, the end glides into view as it comes.
+func TestStreamingInPlace(t *testing.T) {
+	a, _ := testApp(t)
+	a.addModel(presets[0])
+	tt := ui.NewTester(a.view, 1080, 720)
+	a.send("分页一个")
+	tt.Frame()
+	reply := a.current.Messages[1]
+	reply.streaming, reply.Content = true, "可以。"
+	tt.Frame()
+	start, ok := tt.Find("可以。")
+	if !ok {
+		t.Fatalf("no reply in %q", tt.Texts())
+	}
+	grow := func(k int) {
+		reply.Content += fmt.Sprintf("\n\n第 %d 段", k)
+		tt.Frame()
+		time.Sleep(30 * time.Millisecond) // time for the motion, if any
+		tt.Frame()
+	}
+	for k := 1; k <= 6; k++ {
+		grow(k)
+		if r, _ := tt.Find("可以。"); math.Abs(float64(r.Y-start.Y)) > 0.5 {
+			t.Fatalf("paragraph %d: the reply moved from y %.1f to %.1f", k, start.Y, r.Y)
+		}
+	}
+	for k := 7; k <= 40; k++ {
+		grow(k)
+	}
+	if a.current.list.FollowAnimation == nil {
+		t.Error("the end does not glide into view once the chat outgrows the window")
 	}
 }
 
