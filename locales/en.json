@@ -252,6 +252,7 @@
   "readTimeout": "The page took too long to load",
   "readUnreachable": "Cannot reach the site",
   "readEmpty": "The page has no text to read",
+  "readGarbled": "The page’s text encoding is wrong, so it reads as gibberish",
   "readTooLarge": "The page is too large to read",
   "readInvalidURL": "The URL is invalid or not allowed",
   "readHTTPError": "The site returned HTTP {status}",

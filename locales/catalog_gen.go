@@ -2589,6 +2589,16 @@ func (msgs Messages) ReadEmpty() string {
 	return Catalog.Format(msgs.locale, "readEmpty", nil)
 }
 
+// ReadGarbled says "网页的文字编码有误，读出来是乱码"
+// in the language the app shows.
+func ReadGarbled() string { return In(i18n.Locale()).ReadGarbled() }
+
+// ReadGarbled says "网页的文字编码有误，读出来是乱码"
+// in the language of msgs.
+func (msgs Messages) ReadGarbled() string {
+	return Catalog.Format(msgs.locale, "readGarbled", nil)
+}
+
 // ReadTooLarge says "网页太大，读不了"
 // in the language the app shows.
 func ReadTooLarge() string { return In(i18n.Locale()).ReadTooLarge() }

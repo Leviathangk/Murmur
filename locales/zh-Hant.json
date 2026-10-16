@@ -252,6 +252,7 @@
   "readTimeout": "網頁載入逾時",
   "readUnreachable": "連不上這個網站",
   "readEmpty": "網頁上沒有可讀的文字",
+  "readGarbled": "網頁的文字編碼有誤，讀出來是亂碼",
   "readTooLarge": "網頁太大，讀不了",
   "readInvalidURL": "網址無效或不允許存取",
   "readHTTPError": "網站回傳 HTTP {status}",

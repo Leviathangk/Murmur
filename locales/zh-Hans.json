@@ -750,6 +750,7 @@
   "readTimeout": "网页加载超时",
   "readUnreachable": "连不上这个网站",
   "readEmpty": "网页上没有可读的文字",
+  "readGarbled": "网页的文字编码有误，读出来是乱码",
   "readTooLarge": "网页太大，读不了",
   "readInvalidURL": "网址无效或不允许访问",
   "readHTTPError": "网站返回 HTTP {status}",

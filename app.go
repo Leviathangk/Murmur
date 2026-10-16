@@ -257,7 +257,7 @@ func (a *app) reply(c *Chat, m *Model) {
 	var s *searcher
 	fallbackSystem := ""
 	if a.searchOn() {
-		s = &searcher{a: a, reply: reply, web: a.searchService()}
+		s = &searcher{a: a, reply: reply, web: a.searchService(), backup: a.backupService()}
 		s.know(c.Messages)
 		now := time.Now()
 		req.System = searchPrompt(a.settings.SystemPrompt, now, true)

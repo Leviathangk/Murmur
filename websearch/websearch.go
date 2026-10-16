@@ -220,13 +220,17 @@ func clean(results []Result) []Result {
 		}
 		seen[u] = true
 		title := oneLine(r.Title)
-		if title == "" {
+		if title == "" || Garbled(title) {
 			title = u
+		}
+		content := strings.TrimSpace(r.Content)
+		if Garbled(content) {
+			content = ""
 		}
 		out = append(out, Result{
 			Title:     title,
 			URL:       u,
-			Content:   clip(strings.TrimSpace(r.Content), maxContent),
+			Content:   clip(content, maxContent),
 			Published: strings.TrimSpace(r.Published),
 		})
 	}
@@ -235,10 +239,17 @@ func clean(results []Result) []Result {
 
 func page(link, title, text, published string) (*Page, error) {
 	text = strings.TrimSpace(text)
-	if text == "" {
+	switch {
+	case text == "":
 		return nil, errors.New(locales.ReadEmpty())
+	case Garbled(text):
+		return nil, GarbledError{}
 	}
-	return &Page{URL: link, Title: oneLine(title), Text: text, Published: strings.TrimSpace(published)}, nil
+	title = oneLine(title)
+	if Garbled(title) {
+		title = ""
+	}
+	return &Page{URL: link, Title: title, Text: text, Published: strings.TrimSpace(published)}, nil
 }
 
 func oneLine(s string) string {

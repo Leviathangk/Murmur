@@ -176,7 +176,7 @@ func (t transcript) markdown(links, docLinks [][]string) string {
 		if len(m.sources) > 0 {
 			b.WriteString("**" + locales.ExportSources() + "**\n\n")
 			for j, src := range m.sources {
-				fmt.Fprintf(&b, "%d. [%s](<%s>)\n", j+1, markdownEscaper.Replace(src.Title), urlEscaper.Replace(src.URL))
+				fmt.Fprintf(&b, "%d. [%s](<%s>)\n", j+1, markdownEscaper.Replace(src.title()), urlEscaper.Replace(src.URL))
 			}
 			b.WriteString("\n")
 		}

@@ -3,6 +3,7 @@ package websearch
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -221,5 +222,31 @@ func TestTavilyReadFails(t *testing.T) {
 		if err == nil || err.Error() != c.want || len(*calls) != c.calls {
 			t.Errorf("error %v after %d calls, want %q after %d", err, len(*calls), c.want, c.calls)
 		}
+	}
+}
+
+func TestTavilyGarbled(t *testing.T) {
+	tv, _, _ := tavily(t, status(200, `{"results":[
+		{"title":"״(603986) ӯԤ_F10_ͬ˳ڷ","url":"https://basic.10jqka.com.cn/603986/worth.html","content":"˾2025ʵӪ92.03Ԫͬ25.12%й˾ɶ16.48Ԫͬ49.47%"},
+		{"title":"兆易创新(603986)利润表_新浪财经_新浪网","url":"https://vip.stock.finance.sina.com.cn/x","content":"兆易创新(603986) 利润表"}
+	]}`))
+	got, err := tv.Search(context.Background(), "q")
+	want := []Result{
+		{Title: "https://basic.10jqka.com.cn/603986/worth.html", URL: "https://basic.10jqka.com.cn/603986/worth.html"},
+		{Title: "兆易创新(603986)利润表_新浪财经_新浪网", URL: "https://vip.stock.finance.sina.com.cn/x", Content: "兆易创新(603986) 利润表"},
+	}
+	if err != nil || fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Errorf("results %+v, error %v", got, err)
+	}
+
+	tv, _, _ = tavily(t, status(200, `{"results":[{"title":"״(603986) ӯԤ_F10_ͬ˳ڷ","raw_content":"* [¶̬](./)\n* [˾](x)\n* [ɶо](./holder.html)\n* [Ӫ](x)\n* [ӯԤ](./worth.html)\n* [ֲ](x)"}]}`))
+	_, err = tv.Read(context.Background(), "https://basic.10jqka.com.cn/603986/worth.html")
+	if !errors.As(err, new(GarbledError)) || err.Error() != locales.ReadGarbled() {
+		t.Errorf("error %v", err)
+	}
+
+	tv, _, _ = tavily(t, status(200, `{"results":[{"title":"״(603986) ӯԤ_F10_ͬ˳ڷ","raw_content":"# 兆易创新\n\n盈利预测"}]}`))
+	if p, err := tv.Read(context.Background(), "https://basic.10jqka.com.cn/603986/worth.html"); err != nil || p.Title != "" || p.Text != "# 兆易创新\n\n盈利预测" {
+		t.Errorf("page %+v, error %v", p, err)
 	}
 }

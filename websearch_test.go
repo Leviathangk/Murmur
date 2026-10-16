@@ -852,3 +852,70 @@ func TestReadOnlyKnownPages(t *testing.T) {
 		t.Errorf("read %q, reads %+v, %d sources", links, reply.Reads, len(reply.Sources))
 	}
 }
+
+func TestReadGarbled(t *testing.T) {
+	a, _, _ := searchingApp(t)
+	a.settings.SearchService, a.settings.TavilyKey, a.settings.WebSearch = tavily, "tvly-test", true
+	var used []string
+	a.readPage = func(ctx context.Context, w web, link string) (*websearch.Page, error) {
+		used = append(used, w.service+" "+w.key)
+		if w.service == tavily {
+			return nil, websearch.GarbledError{}
+		}
+		return &websearch.Page{URL: link, Title: "兆易创新(603986) 盈利预测_F10_同花顺金融服务网", Text: "# 兆易创新\n\n盈利预测"}, nil
+	}
+	var out string
+	var told error
+	a.stream = func(ctx context.Context, cfg llm.Config, req llm.Request, emit func(llm.Event)) error {
+		out, told = read(t, req, "https://basic.10jqka.com.cn/603986/worth.html")
+		emit(llm.Event{Text: "ok"})
+		return nil
+	}
+
+	a.settings.TinyFishKey = " sk-tinyfish-test "
+	a.send("看看 https://basic.10jqka.com.cn/603986/worth.html")
+	if told != nil || fmt.Sprint(used) != "[tavily tvly-test tinyfish sk-tinyfish-test]" || !strings.HasPrefix(out, "[1] 兆易创新(603986) 盈利预测_F10_同花顺金融服务网\n") {
+		t.Errorf("used %q, told %v, page %q", used, told, out)
+	}
+
+	used = nil
+	a.settings.TinyFishKey = ""
+	a.send("再看看 https://basic.10jqka.com.cn/603986/worth.html")
+	if told == nil || told.Error() != "Reading the page failed: 网页的文字编码有误，读出来是乱码" || fmt.Sprint(used) != "[tavily tvly-test]" {
+		t.Errorf("used %q, told %v", used, told)
+	}
+	tt := ui.NewTester(a.view, 1080, 720)
+	click(t, tt, "读取「basic.10jqka.com.cn/603986/worth.html」失败")
+	if !tt.HasText("网页的文字编码有误，读出来是乱码") {
+		t.Errorf("texts %q", tt.Texts())
+	}
+}
+
+func TestGarbledSourceTitle(t *testing.T) {
+	a, _ := testApp(t)
+	garbled := "״(603986) ӯԤ_F10_ͬ˳ڷ"
+	src := &Source{Title: garbled, URL: "https://basic.10jqka.com.cn/603986/worth.html"}
+	a.current = &Chat{ID: newID(), Title: "兆易创新", Messages: []*Message{
+		{Role: "user", Content: "兆易创新盈利预测", key: a.newKey()},
+		{Role: "assistant", Content: "见 [1]。", key: a.newKey(), Sources: []*Source{src},
+			Reads: []*Read{{URL: src.URL, Source: 1, open: true}}, Steps: []*Step{{Kind: stepRead}, {Kind: stepText, Size: len("见 [1]。")}}},
+	}}
+	a.chats = []*Chat{a.current}
+	tt := ui.NewTester(a.view, 1080, 720)
+	time.Sleep(400 * time.Millisecond)
+	tt.Frame()
+	for _, s := range []string{"已读取「basic.10jqka.com.cn/603986/worth.html」", "basic.10jqka.com.cn/603986/worth.html"} {
+		if !tt.HasText(s) {
+			t.Errorf("no %q in %q", s, tt.Texts())
+		}
+	}
+	for _, s := range tt.Texts() {
+		if strings.Contains(s, "603986)") {
+			t.Errorf("garbled title shows: %q", s)
+		}
+	}
+	tr := transcript{messages: []transcriptMessage{{role: "assistant", content: "见 [1]。", sources: []Source{*src}}}}
+	if md := tr.markdown(make([][]string, 1), make([][]string, 1)); !strings.Contains(md, "1. [basic.10jqka.com.cn/603986/worth.html](<https://basic.10jqka.com.cn/603986/worth.html>)") {
+		t.Errorf("markdown %q", md)
+	}
+}

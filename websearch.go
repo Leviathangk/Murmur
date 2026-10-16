@@ -62,6 +62,13 @@ type Source struct {
 	Published string `json:"published,omitempty"`
 }
 
+func (s *Source) title() string {
+	if s.Title == "" || s.Title == s.URL || websearch.Garbled(s.Title) {
+		return shortURL(s.URL)
+	}
+	return s.Title
+}
+
 type web struct {
 	service, key, proxy string
 }
@@ -104,6 +111,13 @@ func (a *app) searchService() web {
 	return web{service: a.settings.SearchService, key: strings.TrimSpace(*a.settings.searchKey()), proxy: a.settings.Proxy}
 }
 
+func (a *app) backupService() web {
+	if a.settings.SearchService != tavily {
+		return web{}
+	}
+	return web{service: tinyFish, key: strings.TrimSpace(a.settings.TinyFishKey), proxy: a.settings.Proxy}
+}
+
 func (a *app) searchOn() bool {
 	return a.settings.WebSearch && a.searchService().key != ""
 }
@@ -144,6 +158,7 @@ type searcher struct {
 	a       *app
 	reply   *Message
 	web     web
+	backup  web
 	count   int
 	reads   int
 	numbers map[string]int
@@ -327,6 +342,9 @@ func (s *searcher) read(ctx context.Context, input json.RawMessage) (string, err
 		s.reply.step(stepRead)
 	})
 	p, err := s.a.readPage(ctx, s.web, link)
+	if errors.As(err, new(websearch.GarbledError)) && s.backup.key != "" && ctx.Err() == nil {
+		p, err = s.a.readPage(ctx, s.backup, link)
+	}
 	if ctx.Err() != nil {
 		s.a.update(func() {
 			s.reply.reading = ""
@@ -567,7 +585,7 @@ func (a *app) readStep(c *ui.Context, m *Message, r *Read) {
 			ui.Text(c, locales.ReadStepFailed(shortURL(r.URL))).FontSize(13)
 		case src != nil:
 			ui.Icon(c, bookIcon).Size(14, 14)
-			ui.Text(c, locales.ReadStep(src.Title)).FontSize(13)
+			ui.Text(c, locales.ReadStep(src.title())).FontSize(13)
 		default:
 			ui.Icon(c, bookIcon).Size(14, 14)
 			ui.Text(c, locales.ReadStep(shortURL(r.URL))).FontSize(13)
@@ -608,7 +626,7 @@ func sourceRow(c *ui.Context, n int, src *Source) {
 	ui.Row(c).Gap(6).AlignItems(ui.Start).Children(func() {
 		ui.Text(c, fmt.Sprintf("[%d]", n)).FontSize(12).TextColor(t.TextMuted).MinWidth(20).Shrink(0)
 		ui.Column(c).Gap(1).Shrink(1).MinWidth(0).Children(func() {
-			ui.Link(c, src.Title, src.URL).FontSize(13).Tooltip(src.URL)
+			ui.Link(c, src.title(), src.URL).FontSize(13).Tooltip(src.URL)
 			meta := siteOf(src.URL)
 			if d := shortDate(src.Published); d != "" {
 				meta += " · " + d
