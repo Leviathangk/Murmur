@@ -29,6 +29,7 @@ type transcriptMessage struct {
 	thinkMS                              int64
 	images                               []imageSource
 	docs                                 []documentSource
+	sources                              []Source
 }
 
 // transcriptOf copies what of c an export writes.
@@ -39,6 +40,9 @@ func (a *app) transcriptOf(c *Chat) transcript {
 	}
 	for _, m := range c.Messages {
 		tm := transcriptMessage{role: m.Role, content: m.Content, reasoning: m.Reasoning, model: m.Model, err: m.Error, thinkMS: m.ThinkMS}
+		for _, src := range m.Sources {
+			tm.sources = append(tm.sources, *src)
+		}
 		for _, img := range m.Images {
 			tm.images = append(tm.images, a.store.source(img))
 		}
@@ -169,6 +173,13 @@ func (t transcript) markdown(links, docLinks [][]string) string {
 			// Markdown.
 			b.WriteString(asMarkdown(s, m.role == "user") + "\n\n")
 		}
+		if len(m.sources) > 0 {
+			b.WriteString("**" + locales.ExportSources() + "**\n\n")
+			for j, src := range m.sources {
+				fmt.Fprintf(&b, "%d. [%s](<%s>)\n", j+1, markdownEscaper.Replace(src.Title), urlEscaper.Replace(src.URL))
+			}
+			b.WriteString("\n")
+		}
 		if m.err != "" {
 			quote(&b, locales.ExportError(m.err))
 		}
@@ -179,6 +190,8 @@ func (t transcript) markdown(links, docLinks [][]string) string {
 // markdownEscaper escapes the characters Markdown takes for its marks, in
 // the text of a link.
 var markdownEscaper = strings.NewReplacer(`\`, `\\`, "[", `\[`, "]", `\]`, "*", `\*`, "_", `\_`, "`", "\\`")
+
+var urlEscaper = strings.NewReplacer("<", "%3C", ">", "%3E", " ", "%20")
 
 // linkPath returns path as the destination of a link in angle brackets,
 // where it may hold spaces: the characters a URL takes for others, as # for

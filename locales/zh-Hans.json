@@ -62,6 +62,43 @@
       }
     }
   },
+  "searchingNow": "正在搜索：{query}",
+  "@searchingNow": {
+    "placeholders": {
+      "query": {
+        "type": "String"
+      }
+    }
+  },
+  "searchSummary": "已搜索 {searches} 次 · {pages} 个网页",
+  "@searchSummary": {
+    "placeholders": {
+      "searches": {
+        "type": "int"
+      },
+      "pages": {
+        "type": "int"
+      }
+    }
+  },
+  "searchQuery": "搜索「{query}」",
+  "@searchQuery": {
+    "placeholders": {
+      "query": {
+        "type": "String"
+      }
+    }
+  },
+  "searchNoResults": "没有结果",
+  "searchAllFailed": "联网搜索失败",
+  "searchFailed": "搜索失败：{error}",
+  "@searchFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "durationSeconds": "{seconds} 秒",
   "@durationSeconds": {
     "placeholders": {
@@ -124,6 +161,9 @@
   "thinkMediumHint": "兼顾速度和质量",
   "thinkHigh": "高",
   "thinkHighHint": "想得更久，适合难题",
+  "composerSearch": "联网搜索",
+  "composerSearchTooltip": "让模型回答前先在网上搜索",
+  "searchNeedsKey": "先在设置里填写 Tavily API Key，才能联网搜索",
   "attachmentRemoveFile": "移除文件",
   "attachmentRemoveImage": "移除图片",
   "attachTooManyImages": "一条消息最多 {count} 张图片",
@@ -392,6 +432,19 @@
   "generalProxy": "网络代理",
   "proxyPlaceholder": "http://127.0.0.1:7890 或 socks5://127.0.0.1:1080",
   "proxyHint": "留空则直连；支持 http、https、socks5。检查和下载更新也走这个代理",
+  "generalWebSearch": "联网搜索",
+  "webSearchKeyPlaceholder": "Tavily API Key，以 tvly- 开头",
+  "webSearchHint": "用 Tavily 搜索：在 tavily.com 注册即可免费获得 API Key，每月 1000 次。搜索词会发给 Tavily，也走网络代理",
+  "webSearchTest": "测试搜索",
+  "webSearchTesting": "正在搜索…",
+  "webSearchTestSucceeded": "可以搜索，找到 {count} 个网页",
+  "@webSearchTestSucceeded": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "dataLocation": "对话和设置只保存在本机：{path}",
   "@dataLocation": {
     "placeholders": {
@@ -459,6 +512,7 @@
   "trayQuit": "退出 Murmur",
   "exportUntitled": "对话",
   "exportYou": "你",
+  "exportSources": "参考来源",
   "exportModel": "模型",
   "exportDocumentMissing": "（文件已丢失：{name}）",
   "@exportDocumentMissing": {
@@ -561,6 +615,29 @@
   },
   "llmHTTPError": "HTTP {status}：{message}",
   "@llmHTTPError": {
+    "placeholders": {
+      "status": {
+        "type": "String"
+      },
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "tavilyBadKey": "Tavily API Key 无效，请在设置里检查",
+  "tavilyQuota": "Tavily 的搜索额度已用完",
+  "tavilyRateLimited": "Tavily 请求太频繁，请稍后再试",
+  "tavilyTimeout": "Tavily 没有及时响应",
+  "tavilyUnreachable": "连不上 Tavily：{error}。需要代理的话，在设置里填写网络代理",
+  "@tavilyUnreachable": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "tavilyHTTPError": "Tavily 返回 HTTP {status}：{message}",
+  "@tavilyHTTPError": {
     "placeholders": {
       "status": {
         "type": "String"

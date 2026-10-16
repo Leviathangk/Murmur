@@ -127,14 +127,92 @@ func streamAnthropic(ctx context.Context, client *http.Client, cfg Config, req R
 		params.OutputConfig = anthropic.OutputConfigParam{Effort: anthropic.OutputConfigEffortLow}
 	}
 
+	if len(req.Tools) > 0 {
+		params.Tools = anthropicTools(req.Tools)
+	}
+	out := &rounds{emit: emit}
+	for round := 0; ; round++ {
+		if len(req.Tools) > 0 && round == maxToolRounds-1 {
+			none := anthropic.NewToolChoiceNoneParam()
+			params.ToolChoice = anthropic.ToolChoiceUnionParam{OfNone: &none}
+		}
+		msg, err := anthropicRound(ctx, c, params, out.send)
+		if err != nil {
+			var se *statusError
+			if len(req.Tools) > 0 && errors.As(err, &se) && toolsRejected(round, se.status, se.msg) {
+				return toolsError{err}
+			}
+			return err
+		}
+		// What was read from the cache, or written to it, was read too.
+		u := msg.Usage
+		out.add(&Usage{Input: int(u.InputTokens + u.CacheCreationInputTokens + u.CacheReadInputTokens), Output: int(u.OutputTokens)})
+		if msg.StopReason == anthropic.StopReasonRefusal {
+			return errors.New(locales.LlmRefused())
+		}
+		var calls []anthropic.ToolUseBlock
+		for _, b := range msg.Content {
+			if b.Type == "tool_use" {
+				calls = append(calls, b.AsToolUse())
+			}
+		}
+		if msg.StopReason != anthropic.StopReasonToolUse || len(calls) == 0 || round == maxToolRounds-1 {
+			break
+		}
+		params.Messages = append(params.Messages, assistantParam(msg))
+		var results []anthropic.ContentBlockParamUnion
+		for _, call := range calls {
+			result, failed := runTool(ctx, req.Tools, call.Name, call.Input)
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			results = append(results, anthropic.NewToolResultBlock(call.ID, result, failed))
+		}
+		params.Messages = append(params.Messages, anthropic.NewUserMessage(results...))
+		out.next()
+	}
+	out.done()
+	return nil
+}
+
+func anthropicTools(tools []Tool) []anthropic.ToolUnionParam {
+	var out []anthropic.ToolUnionParam
+	for _, t := range tools {
+		tool := anthropic.ToolParam{
+			Name:        t.Name,
+			Description: anthropic.String(t.Description),
+			InputSchema: anthropic.ToolInputSchemaParam{Properties: t.Properties, Required: t.Required},
+		}
+		out = append(out, anthropic.ToolUnionParam{OfTool: &tool})
+	}
+	return out
+}
+
+func assistantParam(msg anthropic.Message) anthropic.MessageParam {
+	p := msg.ToParam()
+	p.Role = anthropic.MessageParamRoleAssistant
+	var blocks []anthropic.ContentBlockParamUnion
+	for _, b := range p.Content {
+		if b.OfText != nil && strings.TrimSpace(b.OfText.Text) == "" {
+			continue
+		}
+		blocks = append(blocks, b)
+	}
+	p.Content = blocks
+	return p
+}
+
+func anthropicRound(ctx context.Context, c anthropic.Client, params anthropic.MessageNewParams, emit func(Event)) (anthropic.Message, error) {
 	stream := c.Messages.NewStreaming(ctx, params)
 	defer stream.Close()
-	refused := false
-	var usage anthropic.Usage
+	var msg anthropic.Message
+	var accErr error
 	for stream.Next() {
-		switch ev := stream.Current().AsAny().(type) {
-		case anthropic.MessageStartEvent:
-			usage = ev.Message.Usage
+		ev := stream.Current()
+		if err := msg.Accumulate(ev); err != nil && accErr == nil {
+			accErr = err
+		}
+		switch ev := ev.AsAny().(type) {
 		case anthropic.ContentBlockDeltaEvent:
 			switch d := ev.Delta.AsAny().(type) {
 			case anthropic.TextDelta:
@@ -142,41 +220,20 @@ func streamAnthropic(ctx context.Context, client *http.Client, cfg Config, req R
 			case anthropic.ThinkingDelta:
 				emit(Event{Reasoning: d.Thinking})
 			}
-		case anthropic.MessageDeltaEvent:
-			if ev.Delta.StopReason == anthropic.StopReasonRefusal {
-				refused = true
-			}
-			// The counts here are totals so far, those left out unchanged
-			// since message_start.
-			u := ev.Usage
-			usage.OutputTokens = u.OutputTokens
-			if u.JSON.InputTokens.Valid() {
-				usage.InputTokens = u.InputTokens
-			}
-			if u.JSON.CacheCreationInputTokens.Valid() {
-				usage.CacheCreationInputTokens = u.CacheCreationInputTokens
-			}
-			if u.JSON.CacheReadInputTokens.Valid() {
-				usage.CacheReadInputTokens = u.CacheReadInputTokens
-			}
 		}
 	}
 	if err := stream.Err(); err != nil {
 		var apiErr *anthropic.Error
 		if errors.As(err, &apiErr) {
-			return errors.New(locales.LlmHTTPError(strconv.Itoa(apiErr.StatusCode), apiErrorMessage(apiErr)))
+			m := apiErrorMessage(apiErr)
+			return msg, &statusError{status: apiErr.StatusCode, msg: m, text: locales.LlmHTTPError(strconv.Itoa(apiErr.StatusCode), m)}
 		}
-		return err
+		return msg, err
 	}
-	if refused {
-		return errors.New(locales.LlmRefused())
+	if accErr != nil && msg.StopReason == anthropic.StopReasonToolUse {
+		return msg, accErr
 	}
-	// What was read from the cache, or written to it, was read too.
-	in := usage.InputTokens + usage.CacheCreationInputTokens + usage.CacheReadInputTokens
-	if in > 0 || usage.OutputTokens > 0 {
-		emit(Event{Usage: &Usage{Input: int(in), Output: int(usage.OutputTokens)}})
-	}
-	return nil
+	return msg, nil
 }
 
 func thinkingBudget(effort Effort, maxTokens int64) int64 {

@@ -267,6 +267,7 @@ func (a *app) generalSettings(c *ui.Context) {
 				ui.Field(c, locales.GeneralSystemPrompt(), func() {
 					ui.TextArea(c.Key("system"), &a.settings.SystemPrompt).Lines(4, 12).Placeholder(locales.SystemPromptPlaceholder())
 				})
+				ui.Field(c, locales.GeneralWebSearch(), func() { a.searchSettings(c) }).Description(locales.WebSearchHint())
 				ui.Field(c, locales.GeneralProxy(), func() {
 					ui.TextInput(c.Key("proxy"), &a.settings.Proxy).Placeholder(locales.ProxyPlaceholder())
 				}).Description(locales.ProxyHint())

@@ -100,9 +100,10 @@ func chatURL(base string) string {
 type openAIChunk struct {
 	Choices []struct {
 		Delta struct {
-			Content          string `json:"content"`
-			ReasoningContent string `json:"reasoning_content"`
-			Reasoning        string `json:"reasoning"`
+			Content          string            `json:"content"`
+			ReasoningContent string            `json:"reasoning_content"`
+			Reasoning        string            `json:"reasoning"`
+			ToolCalls        []json.RawMessage `json:"tool_calls"`
 		} `json:"delta"`
 		Usage *openAIUsage `json:"usage"` // where Kimi tells it
 	} `json:"choices"`
@@ -121,19 +122,46 @@ type apiError struct {
 	Code    any    `json:"code"`
 }
 
+type statusError struct {
+	status int
+	msg    string
+	text   string
+}
+
+func (e *statusError) Error() string { return e.text }
+
 func streamOpenAI(ctx context.Context, client *http.Client, cfg Config, req Request, emit func(Event)) error {
-	var msgs []map[string]any
-	if s := strings.TrimSpace(req.System); s != "" {
-		msgs = append(msgs, map[string]any{"role": "system", "content": s})
-	}
-	for _, m := range req.Messages {
-		msgs = append(msgs, map[string]any{"role": m.Role, "content": openAIContent(m)})
+	tools := len(req.Tools) > 0
+	withReasoning := tools && keepsReasoning(cfg.BaseURL)
+	var steps []openAIStep
+	messages := func() []any {
+		var msgs []any
+		if s := strings.TrimSpace(req.System); s != "" {
+			msgs = append(msgs, map[string]any{"role": "system", "content": s})
+		}
+		for _, m := range req.Messages {
+			msg := map[string]any{"role": m.Role, "content": openAIContent(m)}
+			if withReasoning && m.Role == "assistant" {
+				msg["reasoning_content"] = m.Reasoning
+			}
+			msgs = append(msgs, msg)
+		}
+		for round, st := range steps {
+			msgs = append(msgs, st.turn.message(round, withReasoning))
+			for i, c := range st.turn.calls {
+				msgs = append(msgs, map[string]any{"role": "tool", "tool_call_id": c.callID(round, i), "content": st.results[i]})
+			}
+		}
+		return msgs
 	}
 	body := map[string]any{
 		"model":          strings.TrimSpace(cfg.Model),
-		"messages":       msgs,
+		"messages":       messages(),
 		"stream":         true,
 		"stream_options": map[string]any{"include_usage": true},
+	}
+	if tools {
+		body["tools"] = openAITools(req.Tools)
 	}
 	if cfg.MaxTokens > 0 {
 		// OpenAI's reasoning models take only the newer name.
@@ -144,11 +172,198 @@ func streamOpenAI(ctx context.Context, client *http.Client, cfg Config, req Requ
 		}
 	}
 	applyThinking(body, ResolveThinkStyle(cfg.ThinkStyle, cfg.BaseURL), req.Thinking, req.Effort)
+	out := &rounds{emit: emit}
+	for round := 0; round < maxToolRounds; round++ {
+		if tools && round == maxToolRounds-1 {
+			body["tool_choice"] = "none"
+		}
+		turn, err := openAIRound(ctx, client, cfg, body, out.send)
+		if err != nil {
+			var se *statusError
+			switch {
+			case !errors.As(err, &se) || !tools:
+			case !withReasoning && se.status/100 == 4 && strings.Contains(se.msg, "reasoning_content"):
+				withReasoning = true
+				body["messages"] = messages()
+				round--
+				continue
+			case toolsRejected(round, se.status, se.msg):
+				return toolsError{err}
+			}
+			return err
+		}
+		out.add(turn.usage)
+		if len(turn.calls) == 0 || round == maxToolRounds-1 {
+			break
+		}
+		st := openAIStep{turn: turn}
+		for _, c := range turn.calls {
+			result, _ := runTool(ctx, req.Tools, c.name, json.RawMessage(c.args.String()))
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			st.results = append(st.results, result)
+		}
+		steps = append(steps, st)
+		body["messages"] = messages()
+		out.next()
+	}
+	out.done()
+	return nil
+}
+
+func keepsReasoning(baseURL string) bool {
+	u, err := url.Parse(strings.TrimSpace(baseURL))
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(u.Hostname())
+	for _, h := range []string{"deepseek.com", "moonshot.cn", "moonshot.ai", "kimi.com", "bigmodel.cn", "z.ai"} {
+		if host == h || strings.HasSuffix(host, "."+h) {
+			return true
+		}
+	}
+	return false
+}
+
+type openAIStep struct {
+	turn    *openAITurn
+	results []string
+}
+
+func openAITools(tools []Tool) []any {
+	var out []any
+	for _, t := range tools {
+		params := map[string]any{"type": "object", "properties": t.Properties}
+		if len(t.Required) > 0 {
+			params["required"] = t.Required
+		}
+		out = append(out, map[string]any{
+			"type": "function",
+			"function": map[string]any{
+				"name":        t.Name,
+				"description": t.Description,
+				"parameters":  params,
+			},
+		})
+	}
+	return out
+}
+
+type openAITurn struct {
+	text, reasoning string
+	calls           []*openAICall
+	byIndex         map[int]*openAICall
+	usage           *Usage
+}
+
+type openAICall struct {
+	id, name string
+	args     strings.Builder
+	extra    map[string]json.RawMessage
+}
+
+func (c *openAICall) callID(round, i int) string {
+	if c.id == "" {
+		c.id = fmt.Sprintf("call_%d_%d", round, i)
+	}
+	return c.id
+}
+
+func (t *openAITurn) message(round int, withReasoning bool) map[string]any {
+	msg := map[string]any{"role": "assistant", "content": nil}
+	if t.text != "" {
+		msg["content"] = t.text
+	}
+	if withReasoning {
+		msg["reasoning_content"] = t.reasoning
+	}
+	var calls []any
+	for i, c := range t.calls {
+		args := c.args.String()
+		if !json.Valid([]byte(args)) {
+			args = "{}"
+		}
+		call := map[string]any{}
+		for k, v := range c.extra {
+			call[k] = v
+		}
+		call["id"] = c.callID(round, i)
+		call["type"] = "function"
+		call["function"] = map[string]any{"name": c.name, "arguments": args}
+		calls = append(calls, call)
+	}
+	msg["tool_calls"] = calls
+	return msg
+}
+
+func (t *openAITurn) addCall(raw json.RawMessage) {
+	var d struct {
+		Index    *int   `json:"index"`
+		ID       string `json:"id"`
+		Function struct {
+			Name      string `json:"name"`
+			Arguments string `json:"arguments"`
+		} `json:"function"`
+	}
+	if json.Unmarshal(raw, &d) != nil {
+		return
+	}
+	var c *openAICall
+	switch {
+	case d.Index != nil:
+		if x := t.byIndex[*d.Index]; x != nil && (d.ID == "" || x.id == "" || x.id == d.ID) {
+			c = x
+		}
+	case d.ID != "":
+		for _, x := range t.calls {
+			if x.id == d.ID {
+				c = x
+			}
+		}
+	case len(t.calls) > 0:
+		c = t.calls[len(t.calls)-1]
+	}
+	if c == nil {
+		c = &openAICall{}
+		t.calls = append(t.calls, c)
+	}
+	if d.Index != nil {
+		if t.byIndex == nil {
+			t.byIndex = map[int]*openAICall{}
+		}
+		t.byIndex[*d.Index] = c
+	}
+	if c.id == "" {
+		c.id = d.ID
+	}
+	if c.name == "" {
+		c.name = d.Function.Name
+	}
+	c.args.WriteString(d.Function.Arguments)
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(raw, &fields) == nil {
+		for k, v := range fields {
+			switch k {
+			case "index", "id", "type", "function":
+			default:
+				if string(v) != "null" {
+					if c.extra == nil {
+						c.extra = map[string]json.RawMessage{}
+					}
+					c.extra[k] = v
+				}
+			}
+		}
+	}
+}
+
+func openAIRound(ctx context.Context, client *http.Client, cfg Config, body map[string]any, emit func(Event)) (*openAITurn, error) {
 	var resp *http.Response
 	for {
 		var err error
 		if resp, err = postChat(ctx, client, cfg, body); err != nil {
-			return err
+			return nil, err
 		}
 		if resp.StatusCode/100 == 2 {
 			break
@@ -158,14 +373,20 @@ func streamOpenAI(ctx context.Context, client *http.Client, cfg Config, req Requ
 		// Not every provider takes stream_options: ask again without it,
 		// for the reply without its usage.
 		if _, ok := body["stream_options"]; !ok || resp.StatusCode/100 != 4 || !strings.Contains(err.Error(), "stream_options") {
-			return err
+			return nil, err
 		}
 		delete(body, "stream_options")
 	}
 	defer resp.Body.Close()
 
+	turn := &openAITurn{}
+	var text, reasoning strings.Builder
+	keep := func(e Event) {
+		text.WriteString(e.Text)
+		reasoning.WriteString(e.Reasoning)
+		emit(e)
+	}
 	var think thinkSplitter
-	var usage *Usage
 	sc := bufio.NewScanner(resp.Body)
 	sc.Buffer(make([]byte, 64*1024), 8*1024*1024)
 	for sc.Scan() {
@@ -183,36 +404,37 @@ func streamOpenAI(ctx context.Context, client *http.Client, cfg Config, req Requ
 			continue
 		}
 		if chunk.Error != nil && chunk.Error.Message != "" {
-			return fmt.Errorf("%s", chunk.Error.Message)
+			return nil, fmt.Errorf("%s", chunk.Error.Message)
 		}
 		// The usage comes in the last chunk, or so far in each.
 		if u := chunk.Usage; u != nil {
-			usage = &Usage{Input: u.PromptTokens, Output: u.CompletionTokens}
+			turn.usage = &Usage{Input: u.PromptTokens, Output: u.CompletionTokens}
 		}
 		for _, ch := range chunk.Choices {
 			d := ch.Delta
 			if r := d.ReasoningContent + d.Reasoning; r != "" {
-				emit(Event{Reasoning: r})
+				keep(Event{Reasoning: r})
 			}
 			if d.Content != "" {
-				think.feed(d.Content, emit)
+				think.feed(d.Content, keep)
+			}
+			for _, tc := range d.ToolCalls {
+				turn.addCall(tc)
 			}
 			if u := ch.Usage; u != nil {
-				usage = &Usage{Input: u.PromptTokens, Output: u.CompletionTokens}
+				turn.usage = &Usage{Input: u.PromptTokens, Output: u.CompletionTokens}
 			}
 		}
 	}
-	think.flush(emit)
+	think.flush(keep)
 	if err := sc.Err(); err != nil {
 		if ctx.Err() != nil {
-			return ctx.Err()
+			return nil, ctx.Err()
 		}
-		return err
+		return nil, err
 	}
-	if usage != nil && (usage.Input > 0 || usage.Output > 0) {
-		emit(Event{Usage: usage})
-	}
-	return nil
+	turn.text, turn.reasoning = text.String(), reasoning.String()
+	return turn, nil
 }
 
 // postChat sends body to the Chat Completions endpoint of cfg.
@@ -282,7 +504,7 @@ func httpError(resp *http.Response) error {
 	if msg == "" {
 		msg = http.StatusText(resp.StatusCode)
 	}
-	return errors.New(locales.LlmHTTPError(strconv.Itoa(resp.StatusCode), msg))
+	return &statusError{status: resp.StatusCode, msg: msg, text: locales.LlmHTTPError(strconv.Itoa(resp.StatusCode), msg)}
 }
 
 const (

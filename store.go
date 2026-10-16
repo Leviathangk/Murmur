@@ -68,6 +68,9 @@ type Settings struct {
 	// Notify tells of the replies that come while the window is not in
 	// front, in system notifications.
 	Notify bool `json:"notify"`
+
+	WebSearch bool   `json:"web_search,omitempty"`
+	TavilyKey string `json:"tavily_api_key,omitempty"`
 }
 
 // model returns the model of the given ID, or nil.
@@ -96,12 +99,18 @@ type Message struct {
 	InputTokens  int `json:"input_tokens,omitempty"`
 	OutputTokens int `json:"output_tokens,omitempty"`
 
+	Searches []*Search `json:"searches,omitempty"`
+	Sources  []*Source `json:"sources,omitempty"`
+
 	key        int       // identifies the message in the list
 	streaming  bool      // the reply is still coming
 	thinkOpen  bool      // the reasoning shows
 	thinkStart time.Time // when the reasoning began to come
 	page       *page     // the page the reply wrote out of code blocks, if any
 	pageSought bool      // page was looked for
+
+	searching   string
+	sourcesOpen bool
 }
 
 // Chat is a conversation.

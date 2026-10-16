@@ -18,6 +18,7 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"github.com/Qsnh/Murmur/llm"
+	"github.com/Qsnh/Murmur/websearch"
 )
 
 // testApp returns an app keeping its files in a temporary directory, whose
@@ -27,6 +28,9 @@ func testApp(t *testing.T) (*app, *[]llm.Request) {
 	a := newApp(store{dir: t.TempDir()})
 	a.applyTheme = func(mygo.ThemeSource) {} // no app runs to take it
 	a.updates = &fakeUpdates{automaticChecks: true}
+	a.webSearch = func(ctx context.Context, key, proxy, query string) ([]websearch.Result, error) {
+		return []websearch.Result{{Title: "Murmur", URL: "https://github.com/Qsnh/Murmur", Content: "A minimal AI chat"}}, nil
+	}
 	var reqs []llm.Request
 	a.stream = func(ctx context.Context, cfg llm.Config, req llm.Request, emit func(llm.Event)) error {
 		reqs = append(reqs, req)

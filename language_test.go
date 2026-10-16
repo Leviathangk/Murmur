@@ -155,6 +155,9 @@ func TestInterfaceTranslated(t *testing.T) {
 			a, _ := testApp(t)
 			a.stream = func(ctx context.Context, cfg llm.Config, req llm.Request, emit func(llm.Event)) error {
 				emit(llm.Event{Reasoning: "The user says hello."})
+				for _, tool := range req.Tools {
+					tool.Run(ctx, json.RawMessage(`{"query":"Murmur"}`))
+				}
 				emit(llm.Event{Text: "Hello!\n\n```html\n<h1>Hi</h1>\n```"})
 				emit(llm.Event{Usage: &llm.Usage{Input: 1234, Output: 56}})
 				return nil
@@ -179,11 +182,17 @@ func TestInterfaceTranslated(t *testing.T) {
 				options = append(options, p.name())
 			}
 			check("options", options)
+			a.settings.TavilyKey = "tvly-test"
 			click(t, tt, locales.SettingsGeneral())
+			click(t, tt, locales.WebSearchTest())
+			if !tt.HasText(locales.WebSearchTestSucceeded(1)) {
+				t.Errorf("no search test result in %q", tt.Texts())
+			}
 			check("general", tt.Texts())
 			a.settingsOpen = false
 			tt.Frame()
 
+			a.settings.WebSearch = true
 			click(t, tt, locales.ComposerLabel())
 			tt.Type("Hello")
 			tt.Key(0, ui.KeyEnter)
@@ -194,6 +203,11 @@ func TestInterfaceTranslated(t *testing.T) {
 			}
 			if want := locales.UsageTokens(locales.UsageInput(1234) + " · " + locales.UsageOutput(56)); !tt.HasText(want) {
 				t.Errorf("no %q in %q", want, tt.Texts())
+			}
+			click(t, tt, locales.SearchSummary(1, 1))
+			check("sources", tt.Texts())
+			if !tt.HasText(locales.SearchQuery("Murmur")) {
+				t.Errorf("no search in %q", tt.Texts())
 			}
 			click(t, tt, locales.More())
 			check("chat menu", tt.Menu())

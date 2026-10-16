@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strings"
 	"time"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/Qsnh/Murmur/llm"
 	"github.com/Qsnh/Murmur/locales"
+	"github.com/Qsnh/Murmur/websearch"
 )
 
 // app is the state the window shows.
@@ -68,10 +70,16 @@ type app struct {
 	deleting     string // the ID of the model whose deletion awaits confirmation
 	toast        string // a message to show in the next frame
 
+	searchTesting    bool
+	searchTestResult string
+	searchTestOK     bool
+	searchTestKey    string
+
 	savedSettings string // the settings last written, as JSON
 
 	// stream calls the model; tests replace it.
-	stream func(ctx context.Context, cfg llm.Config, req llm.Request, emit func(llm.Event)) error
+	stream    func(ctx context.Context, cfg llm.Config, req llm.Request, emit func(llm.Event)) error
+	webSearch func(ctx context.Context, key, proxy, query string) ([]websearch.Result, error)
 	// applyTheme shows the app in an appearance; tests replace it.
 	applyTheme    func(mygo.ThemeSource)
 	applyLanguage func(string)
@@ -93,7 +101,7 @@ type app struct {
 }
 
 func newApp(s store) *app {
-	a := &app{store: s, stream: llm.Stream, applyTheme: mygo.Theme.SetSource, applyLanguage: mygo.App.SetLocale}
+	a := &app{store: s, stream: llm.Stream, webSearch: tavilySearch, applyTheme: mygo.Theme.SetSource, applyLanguage: mygo.App.SetLocale}
 	a.openFiles, a.saveAs, a.notify = a.openFilesDialog, a.saveAsDialog, a.notifyDesktop
 	a.openPath = mygo.Shell.OpenPath
 	a.md.CodeBlock = a.codeBlock
@@ -211,6 +219,7 @@ func titleOf(text string) string {
 // main thread.
 type turn struct {
 	role, content string
+	reasoning     string
 	images        []imageSource
 	docs          []documentSource
 }
@@ -222,7 +231,7 @@ func (a *app) reply(c *Chat, m *Model) {
 		if msg.Error != "" {
 			continue
 		}
-		t := turn{role: msg.Role, content: msg.Content}
+		t := turn{role: msg.Role, content: msg.Content, reasoning: msg.Reasoning}
 		for _, img := range msg.Images {
 			t.images = append(t.images, a.store.source(img))
 		}
@@ -241,9 +250,21 @@ func (a *app) reply(c *Chat, m *Model) {
 	c.cancel = cancel
 	cfg := m.config(a.settings.Proxy)
 	req := llm.Request{System: a.settings.SystemPrompt, Thinking: a.settings.Thinking, Effort: a.settings.Effort}
+	var s *searcher
+	fallbackSystem := ""
+	if a.searchOn() {
+		s = &searcher{a: a, reply: reply, key: strings.TrimSpace(a.settings.TavilyKey), proxy: a.settings.Proxy}
+		now := time.Now()
+		req.System = searchPrompt(a.settings.SystemPrompt, now, true)
+		req.Tools = []llm.Tool{s.tool()}
+		fallbackSystem = searchPrompt(a.settings.SystemPrompt, now, false)
+	}
+	system := a.settings.SystemPrompt
 	a.spawn(func() {
 		req.Messages = history(turns)
-		err := a.stream(ctx, cfg, req, func(e llm.Event) {
+		wrote := false
+		emit := func(e llm.Event) {
+			wrote = wrote || e.Text != ""
 			a.update(func() {
 				now := time.Now()
 				if e.Reasoning != "" {
@@ -263,7 +284,17 @@ func (a *app) reply(c *Chat, m *Model) {
 					reply.InputTokens, reply.OutputTokens = u.Input, u.Output
 				}
 			})
-		})
+		}
+		err := a.stream(ctx, cfg, req, emit)
+		if s != nil && errors.Is(err, llm.ErrToolsUnsupported) && ctx.Err() == nil {
+			gap := wrote
+			err = a.searchFirst(ctx, cfg, req, s, system, fallbackSystem, func(e llm.Event) {
+				if gap && e.Text != "" {
+					e.Text, gap = "\n\n"+e.Text, false
+				}
+				emit(e)
+			})
+		}
 		a.update(func() {
 			stopped := ctx.Err() != nil
 			cancel()
@@ -295,7 +326,7 @@ func (a *app) reply(c *Chat, m *Model) {
 func history(turns []turn) []llm.Message {
 	msgs := make([]llm.Message, 0, len(turns))
 	for _, t := range turns {
-		msg := llm.Message{Role: t.role, Content: t.content}
+		msg := llm.Message{Role: t.role, Content: t.content, Reasoning: t.reasoning}
 		for _, src := range t.images {
 			if data, err := src.read(); err == nil {
 				msg.Images = append(msg.Images, llm.Image{MIME: src.mime, Data: data})

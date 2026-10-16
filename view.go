@@ -416,12 +416,15 @@ func (a *app) message(c *ui.Context, ch *Chat, i int) {
 			if m.Reasoning != "" {
 				a.thinking(c, m)
 			}
+			if len(m.Searches) > 0 || m.searching != "" {
+				a.searches(c, m)
+			}
 			switch {
 			case m.Content != "" && m.streaming:
 				markdown.Stream(c, m.Content, &a.md)
 			case m.Content != "":
 				markdown.View(c, m.Content, &a.md)
-			case m.streaming && m.Reasoning == "":
+			case m.streaming && m.Reasoning == "" && m.searching == "":
 				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 					ui.Spinner(c).Size(14, 14)
 					ui.Text(c, locales.ReplyWaiting()).FontSize(13).TextColor(t.TextMuted)
@@ -584,7 +587,12 @@ func (a *app) composer(c *ui.Context, dragOver bool) {
 			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
 				iconButton(c.Key("attach"), clipIcon, locales.ComposerAttach()).OnClick(a.pickFiles)
 				a.modelPicker(c)
-				a.thinkPicker(c)
+				w, _ := c.Size()
+				if !a.collapsed {
+					w -= sidebarWidth
+				}
+				a.thinkPicker(c, w < 640)
+				a.searchToggle(c, w < 640)
 				ui.Spacer(c)
 				b := ui.ButtonBase(c.Key("send")).Size(32, 32).Radius(16).Center()
 				if busy {
@@ -776,7 +784,7 @@ func (a *app) modelPicker(c *ui.Context) {
 		return
 	}
 	sel := ui.SelectBase(c.Key("model"), &a.settings.Current)
-	sel.Trigger.Gap(4).Padding(5, 8).Radius(8).AlignItems(ui.Center).TextColor(t.TextMuted).Label(locales.ComposerModel()).Tooltip(locales.ComposerModelTooltip())
+	sel.Trigger.Gap(4).Padding(5, 8).Radius(8).AlignItems(ui.Center).Shrink(1).MinWidth(56).TextColor(t.TextMuted).Label(locales.ComposerModel()).Tooltip(locales.ComposerModelTooltip())
 	if sel.Trigger.Hovered() || sel.Open() {
 		sel.Trigger.Background(t.SurfaceHover).TextColor(t.Text)
 	}
@@ -785,8 +793,8 @@ func (a *app) modelPicker(c *ui.Context) {
 		label = cur.label()
 	}
 	sel.Trigger.Children(func() {
-		ui.Text(c, label).FontSize(13).SingleLine()
-		ui.Icon(c, downIcon).Size(14, 14)
+		ui.Text(c, label).FontSize(13).SingleLine().Shrink(1).MinWidth(0)
+		ui.Icon(c, downIcon).Size(14, 14).Shrink(0)
 	})
 	sel.Popup(func(panel ui.Element) {
 		menuPanel(c, panel).MinWidth(220)
@@ -845,7 +853,7 @@ func (a *app) setThinkEffort(e llm.Effort) {
 	}
 }
 
-func (a *app) thinkPicker(c *ui.Context) {
+func (a *app) thinkPicker(c *ui.Context, compact bool) {
 	t := c.Theme()
 	effort := a.thinkEffort()
 	sel := ui.SelectBase(c.Key("thinking"), &effort)
@@ -860,12 +868,18 @@ func (a *app) thinkPicker(c *ui.Context) {
 		}
 	}
 	levels := thinkLevels()
-	sel.Trigger.Children(func() {
+	sel.Trigger.Shrink(0).Children(func() {
 		ui.Icon(c, bulbIcon).Size(14, 14)
-		ui.Text(c, locales.ComposerThinking()).FontSize(13).SingleLine()
+		if !compact {
+			ui.Text(c, locales.ComposerThinking()).FontSize(13).SingleLine()
+		}
 		for _, l := range levels {
 			if l.effort == effort && effort != "" {
-				ui.Text(c, "· "+l.name).FontSize(13).SingleLine()
+				name := "· " + l.name
+				if compact {
+					name = l.name
+				}
+				ui.Text(c, name).FontSize(13).SingleLine()
 			}
 		}
 		ui.Icon(c, downIcon).Size(12, 12)
