@@ -471,6 +471,12 @@ func (a *app) actions(c *ui.Context, ch *Chat, i int) {
 		if m.Content != "" {
 			a.copyButton(c, m.Content)
 		}
+		if forkable(m) {
+			iconButton(c.Key("fork"), forkIcon, "从这里开新对话").OnClick(func() {
+				a.fork(ch, i)
+				a.draftInput.Focus(c)
+			})
+		}
 		if last {
 			iconButton(c.Key("retry"), retryIcon, "重新生成").OnClick(func() { a.regenerate(ch) })
 		}
@@ -543,7 +549,7 @@ func (a *app) composer(c *ui.Context, dragOver bool) {
 			if len(a.pending) > 0 || len(a.pendingDocs) > 0 || a.attaching > 0 {
 				a.attachments(c)
 			}
-			ui.TextAreaBase(c.Key("draft"), &a.draft).Lines(1, 10).Padding(4, 4, 4, 0).
+			ui.TextAreaBase(c.Key("draft"), &a.draft).Bind(&a.draftInput).Lines(1, 10).Padding(4, 4, 4, 0).
 				Placeholder("给 Murmur 发消息，Enter 发送，Shift+Enter 换行").Label("消息").AutoFocus().
 				OnPaste(func(text string) bool { return a.paste(svc, text) }).
 				OnTextKey(func(k ui.TextKey) bool {

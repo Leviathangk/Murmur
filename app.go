@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -15,15 +16,16 @@ import (
 
 // app is the state the window shows.
 type app struct {
-	win      *mygo.Window
-	hiding   func() // stops the window leaving full screen from hiding then
-	store    store
-	settings *Settings
-	chats    []*Chat // the newest first
-	current  *Chat   // the chat shown; nil for a new one, not yet sent
-	selected string  // the ID of the chat chosen in the sidebar
-	draft    string  // what is typed in the composer
-	nextKey  int
+	win        *mygo.Window
+	hiding     func() // stops the window leaving full screen from hiding then
+	store      store
+	settings   *Settings
+	chats      []*Chat   // the newest first
+	current    *Chat     // the chat shown; nil for a new one, not yet sent
+	selected   string    // the ID of the chat chosen in the sidebar
+	draft      string    // what is typed in the composer
+	draftInput ui.Handle // the field it is typed in
+	nextKey    int
 
 	pending     []*Image    // the images attached to the message being written
 	pendingDocs []*Document // and the documents
@@ -320,6 +322,39 @@ func (a *app) regenerate(c *Chat) {
 	a.reply(c, m)
 }
 
+// forkable reports whether a chat can go on from m in a new chat: m is a
+// reply that came whole.
+func forkable(m *Message) bool {
+	return m.Role == "assistant" && !m.streaming && m.Error == "" && m.Content != ""
+}
+
+// forkPrefix starts the titles of the chats that go on from another.
+const forkPrefix = "分支 · "
+
+// fork shows a new chat of the messages of c up to message i, a reply, to
+// go on from there; c stays as it is. The two chats share the files of the
+// images and documents.
+func (a *app) fork(c *Chat, i int) {
+	if c == nil || i < 0 || i >= len(c.Messages) || !forkable(c.Messages[i]) {
+		return
+	}
+	title := c.Title
+	if !strings.HasPrefix(title, forkPrefix) {
+		title = forkPrefix + title
+	}
+	f := &Chat{ID: newID(), Title: title, Updated: time.Now()}
+	for _, m := range c.Messages[:i+1] {
+		m := *m
+		m.Images, m.Documents = slices.Clone(m.Images), slices.Clone(m.Documents)
+		m.key, m.thinkOpen = a.newKey(), false
+		f.Messages = append(f.Messages, &m)
+	}
+	a.chats = append([]*Chat{f}, a.chats...)
+	a.current, a.selected = f, f.ID
+	f.list.ScrollToEnd()
+	a.saveChats()
+}
+
 // moveToTop puts c first in the sidebar.
 func (a *app) moveToTop(c *Chat) {
 	for i, x := range a.chats {
@@ -382,7 +417,7 @@ func (a *app) deleteChat(id string) {
 		}
 		a.stop(c)
 		a.chats = append(a.chats[:i], a.chats[i+1:]...)
-		a.store.removeFiles(c)
+		a.store.removeFiles(c, a.chats)
 		if a.current == c {
 			a.newChat()
 		}

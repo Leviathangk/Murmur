@@ -109,19 +109,31 @@ func (a *app) openFilesDialog() ([]string, error) {
 	})
 }
 
-// removeFiles deletes the files of the images and documents of c.
-func (s store) removeFiles(c *Chat) {
+// removeFiles deletes the files of the images and documents of c but those
+// of kept, as a chat that went on from c shares them.
+func (s store) removeFiles(c *Chat, kept []*Chat) {
 	if s.dir == "" {
 		return
 	}
+	images, docs := map[string]bool{}, map[string]bool{}
+	for _, k := range kept {
+		for _, m := range k.Messages {
+			for _, img := range m.Images {
+				images[img.File] = true
+			}
+			for _, doc := range m.Documents {
+				docs[doc.File] = true
+			}
+		}
+	}
 	for _, m := range c.Messages {
 		for _, img := range m.Images {
-			if img.File != "" {
+			if img.File != "" && !images[img.File] {
 				os.Remove(s.imagePath(img.File))
 			}
 		}
 		for _, doc := range m.Documents {
-			if doc.File != "" {
+			if doc.File != "" && !docs[doc.File] {
 				os.Remove(s.documentPath(doc.File))
 			}
 		}
