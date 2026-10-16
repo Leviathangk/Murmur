@@ -399,6 +399,28 @@ func TestEditModel(t *testing.T) {
 	}
 }
 
+func TestChatSettings(t *testing.T) {
+	a, _ := testApp(t)
+	tt := ui.NewTester(a.view, 1080, 720)
+	a.openSettings()
+	tt.Frame()
+	click(t, tt, "对话")
+	if a.settingsTab != 1 || !tt.HasText("系统提示词") || !tt.HasText("测试搜索") || tt.HasText("留空则直连") {
+		t.Fatalf("tab %d, texts %q", a.settingsTab, tt.Texts())
+	}
+	click(t, tt, "系统提示词")
+	tt.Type("be brief")
+	tt.Frame()
+	snapshot(t, tt, "settings-chat")
+	click(t, tt, "通用")
+	if tt.HasText("系统提示词") || tt.HasText("测试搜索") || !tt.HasText("留空则直连") {
+		t.Errorf("general texts %q", tt.Texts())
+	}
+	if b := newApp(a.store); b.settings.SystemPrompt != "be brief" {
+		t.Errorf("saved system prompt %q", b.settings.SystemPrompt)
+	}
+}
+
 func TestTheme(t *testing.T) {
 	a, _ := testApp(t)
 	var applied []mygo.ThemeSource

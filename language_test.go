@@ -183,11 +183,13 @@ func TestInterfaceTranslated(t *testing.T) {
 			}
 			check("options", options)
 			a.settings.TavilyKey = "tvly-test"
-			click(t, tt, locales.SettingsGeneral())
+			click(t, tt, locales.SettingsChat())
 			click(t, tt, locales.WebSearchTest())
 			if !tt.HasText(locales.WebSearchTestSucceeded(1)) {
 				t.Errorf("no search test result in %q", tt.Texts())
 			}
+			check("chat settings", tt.Texts())
+			click(t, tt, locales.SettingsGeneral())
 			check("general", tt.Texts())
 			a.settingsOpen = false
 			tt.Frame()

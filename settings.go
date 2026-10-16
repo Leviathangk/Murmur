@@ -13,8 +13,8 @@ import (
 	"github.com/Qsnh/Murmur/locales"
 )
 
-// settingsView is the settings dialog: the models, and the preferences
-// of every chat.
+// settingsView is the settings dialog: the models, what every chat sends
+// them, and the preferences of Murmur.
 func (a *app) settingsView(c *ui.Context) {
 	t := c.Theme()
 	ui.DialogBase(c.Key("settings"), &a.settingsOpen, func(backdrop, panel ui.Element) {
@@ -23,14 +23,17 @@ func (a *app) settingsView(c *ui.Context) {
 			Background(t.Background).Border(1, t.Border).Shadow(0, 24, 64, 0, ui.RGBA(0, 0, 0, 0.28))
 		ui.Row(c).Gap(12).Padding(12, 12, 12, 20).AlignItems(ui.Center).Shrink(0).Children(func() {
 			ui.Text(c, locales.Settings()).FontSize(16).Bold()
-			ui.Segmented(c.Key("tab"), &a.settingsTab, locales.SettingsModels(), locales.SettingsGeneral()).Label(locales.SettingsSections())
+			ui.Segmented(c.Key("tab"), &a.settingsTab, locales.SettingsModels(), locales.SettingsChat(), locales.SettingsGeneral()).Label(locales.SettingsSections())
 			ui.Spacer(c)
 			iconButton(c.Key("close"), closeIcon, locales.Close()).OnClick(func() { a.settingsOpen = false })
 		})
 		ui.Divider(c)
-		if a.settingsTab == 0 {
+		switch a.settingsTab {
+		case 0:
 			a.modelSettings(c)
-		} else {
+		case 1:
+			a.chatSettings(c)
+		default:
 			a.generalSettings(c)
 		}
 	})
@@ -244,7 +247,20 @@ func languageOptions() []option[string] {
 	return options
 }
 
-// generalSettings are the preferences of every chat.
+func (a *app) chatSettings(c *ui.Context) {
+	ui.Scroll(c).Grow(1).Children(func() {
+		ui.Column(c).Padding(20, 24, 24, 24).Children(func() {
+			ui.Form(c, func() {
+				ui.Field(c, locales.ChatSystemPrompt(), func() {
+					ui.TextArea(c.Key("system"), &a.settings.SystemPrompt).Lines(4, 12).Placeholder(locales.SystemPromptPlaceholder())
+				})
+				ui.Field(c, locales.ChatWebSearch(), func() { a.searchSettings(c) }).Description(locales.WebSearchHint())
+			})
+		})
+	})
+}
+
+// generalSettings are the preferences of Murmur.
 func (a *app) generalSettings(c *ui.Context) {
 	t := c.Theme()
 	ui.Scroll(c).Grow(1).Children(func() {
@@ -264,10 +280,6 @@ func (a *app) generalSettings(c *ui.Context) {
 					ui.Checkbox(c.Key("notify"), &a.settings.Notify, locales.NotifyOnReply())
 				}).Description(locales.NotifyHint())
 				ui.Field(c, locales.GeneralUpdates(), func() { a.updateSettings(c) }).Description(a.updatesDescription())
-				ui.Field(c, locales.GeneralSystemPrompt(), func() {
-					ui.TextArea(c.Key("system"), &a.settings.SystemPrompt).Lines(4, 12).Placeholder(locales.SystemPromptPlaceholder())
-				})
-				ui.Field(c, locales.GeneralWebSearch(), func() { a.searchSettings(c) }).Description(locales.WebSearchHint())
 				ui.Field(c, locales.GeneralProxy(), func() {
 					ui.TextInput(c.Key("proxy"), &a.settings.Proxy).Placeholder(locales.ProxyPlaceholder())
 				}).Description(locales.ProxyHint())

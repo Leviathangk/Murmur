@@ -18,7 +18,7 @@ MURMUR_SNAPSHOTS=1 go test .   # 顺便把界面渲染成 testdata/*.png
 main.go       窗口和入口
 app.go        应用状态：发送、流式接收、停止、重新生成
 view.go       主界面：侧边栏、消息列表、输入框
-settings.go   设置面板：模型管理、系统提示词、代理
+settings.go   设置面板：模型、对话（系统提示词、联网搜索）、通用三个分页
 store.go      设置和对话的读写
 attach.go     附件：选择、拖入、粘贴图片和文件
 image.go      图片：缩放和保存

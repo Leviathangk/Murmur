@@ -1233,6 +1233,16 @@ func (msgs Messages) SettingsModels() string {
 	return Catalog.Format(msgs.locale, "settingsModels", nil)
 }
 
+// SettingsChat says "对话"
+// in the language the app shows.
+func SettingsChat() string { return In(i18n.Locale()).SettingsChat() }
+
+// SettingsChat says "对话"
+// in the language of msgs.
+func (msgs Messages) SettingsChat() string {
+	return Catalog.Format(msgs.locale, "settingsChat", nil)
+}
+
 // SettingsGeneral says "通用"
 // in the language the app shows.
 func SettingsGeneral() string { return In(i18n.Locale()).SettingsGeneral() }
@@ -1735,14 +1745,14 @@ func (msgs Messages) GeneralUpdates() string {
 	return Catalog.Format(msgs.locale, "generalUpdates", nil)
 }
 
-// GeneralSystemPrompt says "系统提示词"
+// ChatSystemPrompt says "系统提示词"
 // in the language the app shows.
-func GeneralSystemPrompt() string { return In(i18n.Locale()).GeneralSystemPrompt() }
+func ChatSystemPrompt() string { return In(i18n.Locale()).ChatSystemPrompt() }
 
-// GeneralSystemPrompt says "系统提示词"
+// ChatSystemPrompt says "系统提示词"
 // in the language of msgs.
-func (msgs Messages) GeneralSystemPrompt() string {
-	return Catalog.Format(msgs.locale, "generalSystemPrompt", nil)
+func (msgs Messages) ChatSystemPrompt() string {
+	return Catalog.Format(msgs.locale, "chatSystemPrompt", nil)
 }
 
 // SystemPromptPlaceholder says "每次对话开始时发给模型的说明，比如：你是一个简洁的助手，用中文回答。"
@@ -1785,14 +1795,14 @@ func (msgs Messages) ProxyHint() string {
 	return Catalog.Format(msgs.locale, "proxyHint", nil)
 }
 
-// GeneralWebSearch says "联网搜索"
+// ChatWebSearch says "联网搜索"
 // in the language the app shows.
-func GeneralWebSearch() string { return In(i18n.Locale()).GeneralWebSearch() }
+func ChatWebSearch() string { return In(i18n.Locale()).ChatWebSearch() }
 
-// GeneralWebSearch says "联网搜索"
+// ChatWebSearch says "联网搜索"
 // in the language of msgs.
-func (msgs Messages) GeneralWebSearch() string {
-	return Catalog.Format(msgs.locale, "generalWebSearch", nil)
+func (msgs Messages) ChatWebSearch() string {
+	return Catalog.Format(msgs.locale, "chatWebSearch", nil)
 }
 
 // WebSearchKeyPlaceholder says "Tavily API Key，以 tvly- 开头"
