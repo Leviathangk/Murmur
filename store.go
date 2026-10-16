@@ -111,6 +111,32 @@ type Message struct {
 
 	searching   string
 	sourcesOpen bool
+	writing     bool
+}
+
+func (m *Message) think(now time.Time, s string) {
+	if m.thinkStart.IsZero() {
+		m.thinkStart = now
+	}
+	m.Reasoning += s
+	m.writing = false
+}
+
+func (m *Message) write(now time.Time, s string) {
+	m.pause(now)
+	if m.Content == "" {
+		m.thinkOpen = false
+	}
+	m.Content += s
+	m.writing = true
+}
+
+func (m *Message) pause(now time.Time) {
+	if !m.thinkStart.IsZero() {
+		m.ThinkMS += max(now.Sub(m.thinkStart).Milliseconds(), 1)
+		m.thinkStart = time.Time{}
+	}
+	m.writing = false
 }
 
 // Chat is a conversation.

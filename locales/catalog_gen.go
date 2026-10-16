@@ -377,6 +377,16 @@ func (msgs Messages) ReplyWaiting() string {
 	return Catalog.Format(msgs.locale, "replyWaiting", nil)
 }
 
+// ReplyThinking says "正在思考…"
+// in the language the app shows.
+func ReplyThinking() string { return In(i18n.Locale()).ReplyThinking() }
+
+// ReplyThinking says "正在思考…"
+// in the language of msgs.
+func (msgs Messages) ReplyThinking() string {
+	return Catalog.Format(msgs.locale, "replyThinking", nil)
+}
+
 // ReplyEmpty says "模型没有返回任何内容"
 // in the language the app shows.
 func ReplyEmpty() string { return In(i18n.Locale()).ReplyEmpty() }

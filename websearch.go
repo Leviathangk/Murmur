@@ -110,7 +110,10 @@ func (s *searcher) run(ctx context.Context, input json.RawMessage) (string, erro
 	if utf8.RuneCountInString(query) > maxQueryRunes {
 		query = string([]rune(query)[:maxQueryRunes])
 	}
-	s.a.update(func() { s.reply.searching = query })
+	s.a.update(func() {
+		s.reply.pause(time.Now())
+		s.reply.searching = query
+	})
 	results, err := s.a.webSearch(ctx, s.key, s.proxy, query)
 	if ctx.Err() != nil {
 		s.a.update(func() { s.reply.searching = "" })
@@ -228,70 +231,62 @@ func (a *app) searchToggle(c *ui.Context, compact bool) {
 
 func (a *app) searches(c *ui.Context, m *Message) {
 	t := c.Theme()
-	if len(m.Searches) > 0 {
-		failed := 0
-		for _, s := range m.Searches {
-			if s.Error != "" {
-				failed++
-			}
+	failed := 0
+	for _, s := range m.Searches {
+		if s.Error != "" {
+			failed++
 		}
-		allFailed := failed == len(m.Searches)
-		p := ui.CollapsibleBase(c.Key("sources"), &m.sourcesOpen)
-		p.Trigger.Gap(6).Padding(5, 10).Margin(0, 0, 0, -10).Radius(8).AlignItems(ui.Center).AlignSelf(ui.Start).TextColor(t.TextMuted)
-		switch {
-		case allFailed:
-			p.Trigger.TextColor(t.Danger)
-			if p.Trigger.Hovered() {
-				p.Trigger.Background(t.Danger.Alpha(0.1))
-			}
-		case p.Trigger.Hovered():
-			p.Trigger.Background(t.SurfaceHover).TextColor(t.Text)
+	}
+	allFailed := failed == len(m.Searches)
+	p := ui.CollapsibleBase(c.Key("sources"), &m.sourcesOpen)
+	p.Trigger.Gap(6).Padding(5, 10).Margin(0, 0, 0, -10).Radius(8).AlignItems(ui.Center).AlignSelf(ui.Start).TextColor(t.TextMuted)
+	switch {
+	case allFailed:
+		p.Trigger.TextColor(t.Danger)
+		if p.Trigger.Hovered() {
+			p.Trigger.Background(t.Danger.Alpha(0.1))
 		}
-		p.Trigger.Children(func() {
-			if allFailed {
-				ui.Icon(c, alertIcon).Size(14, 14)
-				ui.Text(c, locales.SearchAllFailed()).FontSize(13)
-			} else {
-				ui.Icon(c, globeIcon).Size(14, 14)
-				ui.Text(c, locales.SearchSummary(len(m.Searches), len(m.Sources))).FontSize(13)
+	case p.Trigger.Hovered():
+		p.Trigger.Background(t.SurfaceHover).TextColor(t.Text)
+	}
+	p.Trigger.Children(func() {
+		if allFailed {
+			ui.Icon(c, alertIcon).Size(14, 14)
+			ui.Text(c, locales.SearchAllFailed()).FontSize(13)
+		} else {
+			ui.Icon(c, globeIcon).Size(14, 14)
+			ui.Text(c, locales.SearchSummary(len(m.Searches), len(m.Sources))).FontSize(13)
+		}
+		ui.Icon(c, chevronIcon).Size(14, 14).Rotate(90 * p.Progress())
+	})
+	p.Panel(func() {
+		ui.Column(c).Margin(6, 0, 2, 4).Padding(2, 0, 2, 14).Gap(6).BorderWidth(0, 0, 0, 2).BorderColor(t.Border).Children(func() {
+			for i, s := range m.Searches {
+				ui.Column(c.Key(i)).Gap(2).Children(func() {
+					ui.Text(c, locales.SearchQuery(s.Query)).FontSize(12).TextColor(t.TextMuted).Selectable()
+					if s.Error != "" {
+						ui.Text(c, locales.SearchFailed(s.Error)).FontSize(12).TextColor(t.Danger).Selectable()
+					}
+				})
 			}
-			ui.Icon(c, chevronIcon).Size(14, 14).Rotate(90 * p.Progress())
-		})
-		p.Panel(func() {
-			ui.Column(c).Margin(6, 0, 2, 4).Padding(2, 0, 2, 14).Gap(6).BorderWidth(0, 0, 0, 2).BorderColor(t.Border).Children(func() {
-				for i, s := range m.Searches {
-					ui.Column(c.Key(i)).Gap(2).Children(func() {
-						ui.Text(c, locales.SearchQuery(s.Query)).FontSize(12).TextColor(t.TextMuted).Selectable()
-						if s.Error != "" {
-							ui.Text(c, locales.SearchFailed(s.Error)).FontSize(12).TextColor(t.Danger).Selectable()
+			if len(m.Sources) == 0 && failed == 0 {
+				ui.Text(c, locales.SearchNoResults()).FontSize(12).TextColor(t.TextMuted)
+			}
+			for i, src := range m.Sources {
+				ui.Row(c.Key(src.URL)).Gap(6).AlignItems(ui.Start).Children(func() {
+					ui.Text(c, fmt.Sprintf("[%d]", i+1)).FontSize(12).TextColor(t.TextMuted).MinWidth(20).Shrink(0)
+					ui.Column(c).Gap(1).Shrink(1).MinWidth(0).Children(func() {
+						ui.Link(c, src.Title, src.URL).FontSize(13).Tooltip(src.URL)
+						meta := siteOf(src.URL)
+						if d := shortDate(src.Published); d != "" {
+							meta += " · " + d
 						}
+						ui.Text(c, meta).FontSize(11).TextColor(t.TextMuted).SingleLine()
 					})
-				}
-				if len(m.Sources) == 0 && failed == 0 {
-					ui.Text(c, locales.SearchNoResults()).FontSize(12).TextColor(t.TextMuted)
-				}
-				for i, src := range m.Sources {
-					ui.Row(c.Key(src.URL)).Gap(6).AlignItems(ui.Start).Children(func() {
-						ui.Text(c, fmt.Sprintf("[%d]", i+1)).FontSize(12).TextColor(t.TextMuted).MinWidth(20).Shrink(0)
-						ui.Column(c).Gap(1).Shrink(1).MinWidth(0).Children(func() {
-							ui.Link(c, src.Title, src.URL).FontSize(13).Tooltip(src.URL)
-							meta := siteOf(src.URL)
-							if d := shortDate(src.Published); d != "" {
-								meta += " · " + d
-							}
-							ui.Text(c, meta).FontSize(11).TextColor(t.TextMuted).SingleLine()
-						})
-					})
-				}
-			})
+				})
+			}
 		})
-	}
-	if m.searching != "" {
-		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-			ui.Spinner(c).Size(14, 14)
-			ui.Text(c, locales.SearchingNow(m.searching)).FontSize(13).TextColor(t.TextMuted).SingleLine().Shrink(1)
-		})
-	}
+	})
 }
 
 func (a *app) testSearch() {

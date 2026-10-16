@@ -268,17 +268,10 @@ func (a *app) reply(c *Chat, m *Model) {
 			a.update(func() {
 				now := time.Now()
 				if e.Reasoning != "" {
-					if reply.thinkStart.IsZero() {
-						reply.thinkStart = now
-					}
-					reply.Reasoning += e.Reasoning
+					reply.think(now, e.Reasoning)
 				}
 				if e.Text != "" {
-					if reply.Reasoning != "" && reply.ThinkMS == 0 {
-						reply.ThinkMS = max(now.Sub(reply.thinkStart).Milliseconds(), 1)
-						reply.thinkOpen = false
-					}
-					reply.Content += e.Text
+					reply.write(now, e.Text)
 				}
 				if u := e.Usage; u != nil {
 					reply.InputTokens, reply.OutputTokens = u.Input, u.Output
@@ -300,9 +293,7 @@ func (a *app) reply(c *Chat, m *Model) {
 			cancel()
 			c.cancel = nil
 			reply.streaming = false
-			if reply.Reasoning != "" && reply.ThinkMS == 0 {
-				reply.ThinkMS = max(time.Since(reply.thinkStart).Milliseconds(), 1)
-			}
+			reply.pause(time.Now())
 			switch {
 			case stopped:
 			case err != nil:

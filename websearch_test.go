@@ -197,6 +197,72 @@ func TestSearching(t *testing.T) {
 	snapshot(t, tt, "search-failed")
 }
 
+func TestActivityBetweenRounds(t *testing.T) {
+	a, _, _ := searchingApp(t)
+	a.settings.TavilyKey, a.settings.WebSearch = "tvly-test", true
+	tt := ui.NewTester(a.view, 1080, 720)
+	activity := []string{"正在搜索：Go 1.27", "正在等待回复…", "正在思考…"}
+	shows := func(want string) {
+		t.Helper()
+		tt.Frame()
+		for _, s := range activity {
+			if tt.HasText(s) != (s == want) {
+				t.Errorf("want %q, texts %q", want, tt.Texts())
+				return
+			}
+		}
+		if want == "" {
+			return
+		}
+		text, _ := tt.Find("我先查一下。")
+		row, _ := tt.Find(want)
+		if row.Y <= text.Y {
+			t.Errorf("%q at y %.1f, above the text at y %.1f", want, row.Y, text.Y)
+		}
+	}
+	thinking := func() bool {
+		for _, s := range tt.Texts() {
+			if strings.HasPrefix(s, "思考中…") {
+				return true
+			}
+		}
+		return false
+	}
+	a.webSearch = func(ctx context.Context, key, proxy, query string) ([]websearch.Result, error) {
+		shows("正在搜索：Go 1.27")
+		snapshot(t, tt, "activity-searching")
+		if thinking() {
+			t.Errorf("still thinking while searching: %q", tt.Texts())
+		}
+		return goResults[query], nil
+	}
+	a.stream = func(ctx context.Context, cfg llm.Config, req llm.Request, emit func(llm.Event)) error {
+		emit(llm.Event{Reasoning: "要查一下。"})
+		emit(llm.Event{Text: "我先查一下。"})
+		shows("")
+		if _, err := run(t, req, "Go 1.27"); err != nil {
+			return err
+		}
+		shows("正在等待回复…")
+		snapshot(t, tt, "activity-waiting")
+		emit(llm.Event{Reasoning: "\n\n结果说是 1.27。"})
+		shows("正在思考…")
+		snapshot(t, tt, "activity-thinking")
+		if !thinking() {
+			t.Errorf("no live thinking label in %q", tt.Texts())
+		}
+		emit(llm.Event{Text: "\n\nGo 1.27 [1]。"})
+		shows("")
+		return nil
+	}
+	a.send("Go 最新版本？")
+	shows("")
+	reply := a.current.Messages[1]
+	if reply.ThinkMS < 2 || reply.writing || !reply.thinkStart.IsZero() {
+		t.Errorf("think %d ms, writing %v, thinking since %v", reply.ThinkMS, reply.writing, reply.thinkStart)
+	}
+}
+
 func TestSearchLimit(t *testing.T) {
 	a, _, queries := searchingApp(t)
 	a.settings.TavilyKey, a.settings.WebSearch = "tvly-test", true

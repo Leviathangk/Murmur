@@ -34,6 +34,7 @@
   "welcomeTitle": "How can I help you?",
   "welcomeAddModel": "Add a model first: OpenAI, Claude, DeepSeek, Qwen, Ollama, or any OpenAI-compatible API.",
   "replyWaiting": "Waiting for a reply…",
+  "replyThinking": "Thinking…",
   "replyEmpty": "The model returned nothing",
   "replyPreviewPage": "Preview Web Page",
   "replyFork": "Branch into a New Chat",

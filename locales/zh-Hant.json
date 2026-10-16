@@ -34,6 +34,7 @@
   "welcomeTitle": "有什麼可以幫你？",
   "welcomeAddModel": "先新增一個模型：OpenAI、Claude、DeepSeek、通義千問、Ollama，或任何相容 OpenAI 的 API。",
   "replyWaiting": "正在等待回覆…",
+  "replyThinking": "正在思考…",
   "replyEmpty": "模型沒有回傳任何內容",
   "replyPreviewPage": "預覽網頁",
   "replyFork": "從這裡開新對話",

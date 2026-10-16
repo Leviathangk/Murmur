@@ -416,7 +416,7 @@ func (a *app) message(c *ui.Context, ch *Chat, i int) {
 			if m.Reasoning != "" {
 				a.thinking(c, m)
 			}
-			if len(m.Searches) > 0 || m.searching != "" {
+			if len(m.Searches) > 0 {
 				a.searches(c, m)
 			}
 			switch {
@@ -424,11 +424,9 @@ func (a *app) message(c *ui.Context, ch *Chat, i int) {
 				markdown.Stream(c, m.Content, &a.md)
 			case m.Content != "":
 				markdown.View(c, m.Content, &a.md)
-			case m.streaming && m.Reasoning == "" && m.searching == "":
-				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-					ui.Spinner(c).Size(14, 14)
-					ui.Text(c, locales.ReplyWaiting()).FontSize(13).TextColor(t.TextMuted)
-				})
+			}
+			if m.streaming {
+				a.activity(c, m)
 			}
 			if m.Error != "" {
 				ui.Row(c).Gap(8).Padding(10, 12).Radius(10).Background(t.Danger.Alpha(0.1)).TextColor(t.Danger).Children(func() {
@@ -448,8 +446,8 @@ func (a *app) thinking(c *ui.Context, m *Message) {
 	t := c.Theme()
 	label := locales.ThinkingTitle()
 	switch {
-	case m.streaming && m.Content == "":
-		label = locales.ThinkingNow(seconds(time.Since(m.thinkStart).Milliseconds()))
+	case m.streaming && !m.thinkStart.IsZero():
+		label = locales.ThinkingNow(seconds(m.ThinkMS + time.Since(m.thinkStart).Milliseconds()))
 		c.After(time.Second)
 	case m.ThinkMS > 0:
 		label = locales.ThinkingDone(seconds(m.ThinkMS))
@@ -468,6 +466,27 @@ func (a *app) thinking(c *ui.Context, m *Message) {
 		ui.Column(c).Margin(6, 0, 2, 4).Padding(2, 0, 2, 14).BorderWidth(0, 0, 0, 2).BorderColor(t.Border).Children(func() {
 			ui.Text(c, strings.TrimSpace(m.Reasoning)).FontSize(13).LineHeight(1.6).TextColor(t.TextMuted).Selectable()
 		})
+	})
+}
+
+func (a *app) activity(c *ui.Context, m *Message) {
+	var label string
+	switch {
+	case m.searching != "":
+		label = locales.SearchingNow(m.searching)
+	case m.writing:
+		return
+	case !m.thinkStart.IsZero():
+		if m.Content == "" {
+			return
+		}
+		label = locales.ReplyThinking()
+	default:
+		label = locales.ReplyWaiting()
+	}
+	ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+		ui.Spinner(c).Size(14, 14)
+		ui.Text(c, label).FontSize(13).TextColor(c.Theme().TextMuted).SingleLine().Shrink(1)
 	})
 }
 
