@@ -78,6 +78,7 @@ func (a *app) view(c *ui.Context) {
 	a.renameDialog(c)
 	a.imageViewer(c)
 	a.documentViewer(c)
+	a.previewer(c)
 	a.autosave()
 }
 
@@ -483,6 +484,9 @@ func (a *app) actions(c *ui.Context, ch *Chat, i int) {
 	ui.Row(c).Gap(2).AlignItems(ui.Center).Margin(-4, 0, 0, -6).Children(func() {
 		if m.Content != "" {
 			a.copyButton(c, m.Content)
+		}
+		if p := pageOf(m); p != nil {
+			iconButton(c.Key("preview"), previewIcon, "预览网页").OnClick(func() { a.preview(*p) })
 		}
 		if forkable(m) {
 			iconButton(c.Key("fork"), forkIcon, "从这里开新对话").OnClick(func() {

@@ -97,6 +97,8 @@ type Message struct {
 	streaming  bool      // the reply is still coming
 	thinkOpen  bool      // the reasoning shows
 	thinkStart time.Time // when the reasoning began to come
+	page       *page     // the page the reply wrote out of code blocks, if any
+	pageSought bool      // page was looked for
 }
 
 // Chat is a conversation.

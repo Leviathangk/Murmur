@@ -37,6 +37,9 @@ type app struct {
 	readOpen    bool      // its text shows
 	readText    string    // what of it shows, once read
 	readLoaded  bool
+	previewing  page          // the page previewed, if any
+	previewOpen bool          // it shows
+	web         *mygo.WebView // where pages are previewed, made the first time
 
 	collapsed bool // the sidebar is hidden
 	md        markdown.Options
@@ -75,6 +78,9 @@ type app struct {
 	// saveAs asks where to save a file, named name at first in dir,
 	// blocking until the user chooses, "" when canceled; tests replace it.
 	saveAs func(dir, name string) (string, error)
+	// openPath opens a file with its app, as a page previewed in the
+	// browser; tests replace it.
+	openPath func(path string) error
 	// notify tells of a reply in a system notification, unless the window
 	// is in front; tests replace it.
 	notify func(mygo.NotificationOptions)
@@ -86,6 +92,8 @@ type app struct {
 func newApp(s store) *app {
 	a := &app{store: s, stream: llm.Stream, applyTheme: mygo.Theme.SetSource}
 	a.openFiles, a.saveAs, a.notify = a.openFilesDialog, a.saveAsDialog, a.notifyDesktop
+	a.openPath = mygo.Shell.OpenPath
+	a.md.CodeBlock = a.codeBlock
 	a.settings = s.loadSettings()
 	a.chats = s.loadChats()
 	s.checkDocuments(a.chats)

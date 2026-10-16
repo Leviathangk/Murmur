@@ -1,6 +1,6 @@
 # 开发文档
 
-Murmur 用 [MyGo](https://mygo.egoist.dev/docs) 的原生 UI 写成：纯 Go、无 cgo、不依赖 WebView。
+Murmur 用 [MyGo](https://mygo.egoist.dev/docs) 的原生 UI 写成：纯 Go、无 cgo，界面不依赖 WebView；只有预览网页时用系统自带的网页引擎。
 
 ## 开发
 
@@ -23,6 +23,7 @@ store.go      设置和对话的读写
 attach.go     附件：选择、拖入、粘贴图片和文件
 image.go      图片：缩放和保存
 document.go   文件：读出文字、保存，消息里的卡片和预览
+preview.go    预览回复里的网页：HTML / SVG 代码块和整页 HTML
 search.go     搜索对话
 export.go     导出对话为 Markdown
 presets.go    服务商预设
@@ -103,6 +104,17 @@ Anthropic 协议用官方 Go SDK：Claude 4.6 及以后的模型用自适应思�
 - 分支把到这条回复为止的消息复制成新对话：保留时间、模型、思考和用量，换新的列表 key；标题前加「分支 · 」，从分支再开分支不重复加；`updated` 是现在，排在侧边栏最前面，切过去后焦点在输入框
 - 原对话正在生成时也能从前面的回复开分支，正在生成的那条不会被复制
 - 图片和文件不复制，两个对话的消息指向 `images/`、`documents/` 下同一个文件；删除对话时只删其他对话都没用到的文件
+
+## 网页预览的实现
+
+- 代码块用 `markdown.Options.CodeBlock` 自己画：语言是 `html`、`htm`、`xhtml`、`svg`（不分大小写）的，在 MyGo 默认的样式上多一个「预览」按钮，其余交给 `markdown.DefaultCodeBlock`。按钮和「复制」一样，代码块没写完（`CodeBlockView.Open`）时不能点
+- 回复本身是网页的：回复结束后用 MyGo 的 Markdown 解析器找顶层的 HTML 块，以 `<!DOCTYPE html` 或 `<html` 开头的，从它取到 `</html>`（没有就到结尾）；只找一次，结果记在消息上（不存盘）
+- SVG 包在一个居中的页面里；标题取 `<title>`，没有时显示「HTML 预览」「SVG 预览」「网页预览」
+- 预览是窗口上的对话框，里面是 `Window.NewWebView` 建的系统 WebView（macOS 是 WKWebView，Windows 是 WebView2），第一次预览时建，之后重复用。`mygo.WebViewAvailable()` 为假（Windows 没有 WebView2 Runtime）或创建失败时，直接在浏览器中打开
+- 页面用 `LoadHTML` 载入，地址是 `https://preview.invalid/`：不是受信任的来源，页面里的 `mygo.call` 会被拒绝；用空地址的话页面在 `about:blank`，MyGo 当作应用自己的页面，能调用绑定的 Go 方法
+- `OnWillNavigate` 拦下离开这个地址的跳转：用户点的 http(s)、mailto 链接交给系统浏览器，页面脚本自己的跳转直接取消；`target="_blank"` 和 `window.open` 按 MyGo 默认，http(s) 在浏览器中打开
+- 对话框关掉时载入空页面，网页的脚本、动画和声音随之停止，焦点回到输入框
+- 「在浏览器中打开」把页面写到临时目录的 `Murmur/preview-<内容哈希>.html`，开头加 UTF-8 BOM（没写 `<meta charset>` 的中文页面在浏览器里不乱码），再用 `Shell.OpenPath` 打开
 
 ## 后台运行的实现
 
