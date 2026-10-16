@@ -56,6 +56,7 @@ type app struct {
 
 	exportDir string // the folder exported to last
 	exported  string // the file just exported, to tell in a toast
+	savedPage string
 
 	settingsOpen bool
 	settingsTab  int

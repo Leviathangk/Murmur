@@ -105,6 +105,96 @@ func TestPreviewCodeBlock(t *testing.T) {
 	}
 }
 
+func TestDownloadPage(t *testing.T) {
+	a, _ := testApp(t)
+	a.addModel(presets[2])
+	dir := t.TempDir()
+	var asked [][2]string
+	saveTo := func(name string) {
+		a.saveAs = func(d, n string) (string, error) {
+			asked = append(asked, [2]string{d, n})
+			return filepath.Join(dir, name), nil
+		}
+	}
+	saveTo("计数器.html")
+	replyWith(a, "```html\n"+counterPage+"```\n\n```svg\n<svg viewBox=\"0 0 10 10\"><circle r=\"5\"/></svg>\n```\n")
+	tt := ui.NewTester(a.view, 1080, 720)
+	a.send("写一个网页和一个图标")
+	tt.Frame()
+
+	n := 0
+	for _, s := range tt.Texts() {
+		if s == "下载" {
+			n++
+		}
+	}
+	if n != 2 {
+		t.Fatalf("%d download buttons for a block of HTML: texts %q", n, tt.Texts())
+	}
+	snapshot(t, tt, "download-button")
+	if err := tt.Click("下载"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if len(asked) != 1 || asked[0] != [2]string{"", "计数器 & 按钮.html"} {
+		t.Fatalf("asked %q", asked)
+	}
+	if b, err := os.ReadFile(filepath.Join(dir, "计数器.html")); err != nil || string(b) != "\uFEFF"+counterPage {
+		t.Errorf("file %q, %v", b, err)
+	}
+	if !tt.HasText("已下载「计数器.html」") {
+		t.Errorf("texts %q", tt.Texts())
+	}
+
+	saveTo("index.html")
+	tt.Click("预览")
+	tt.Frame()
+	if err := tt.Click("下载 HTML 文件"); err != nil {
+		t.Fatalf("%v: texts %q", err, tt.Texts())
+	}
+	tt.Frame()
+	if len(asked) != 2 || asked[1] != [2]string{dir, "计数器 & 按钮.html"} {
+		t.Fatalf("asked %q", asked)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "index.html")); err != nil {
+		t.Error(err)
+	}
+	snapshot(t, tt, "download-preview")
+
+	a.previewOpen = false
+	tt.Frame()
+	p, _ := codePage("svg", `<svg viewBox="0 0 10 10"><circle r="5"/></svg>`)
+	a.preview(p)
+	tt.Frame()
+	if !tt.HasText("SVG 预览") {
+		t.Fatalf("texts %q", tt.Texts())
+	}
+	if _, ok := tt.Find("下载 HTML 文件"); ok {
+		t.Error("a download button for SVG")
+	}
+
+	charset := strings.Replace(counterPage, "<head>", "<head>\n  <meta charset=\"utf-8\">", 1)
+	saveTo("charset.html")
+	a.download(page{html: charset})
+	if b, err := os.ReadFile(filepath.Join(dir, "charset.html")); err != nil || string(b) != charset {
+		t.Errorf("file %q, %v", b, err)
+	}
+
+	a.savedPage, a.toast = "", ""
+	a.saveAs = func(string, string) (string, error) { return "", nil }
+	a.download(page{html: counterPage})
+	if a.savedPage != "" || a.toast != "" {
+		t.Errorf("canceled: downloaded %q, toast %q", a.savedPage, a.toast)
+	}
+	a.saveAs = func(string, string) (string, error) {
+		return filepath.Join(dir, "没有这个文件夹", "a.html"), nil
+	}
+	a.download(page{html: counterPage})
+	if !strings.HasPrefix(a.toast, "下载失败：") {
+		t.Errorf("toast %q", a.toast)
+	}
+}
+
 // A block still being written waits for its end.
 func TestPreviewWaitsForTheCode(t *testing.T) {
 	a, _ := testApp(t)
@@ -122,6 +212,12 @@ func TestPreviewWaitsForTheCode(t *testing.T) {
 	if a.previewOpen {
 		t.Error("previewing a block being written")
 	}
+	a.saveAs = func(string, string) (string, error) {
+		t.Error("downloading a block being written")
+		return "", nil
+	}
+	tt.Click("下载")
+	tt.Frame()
 }
 
 // A reply that is a page itself, out of code blocks, has a button
@@ -149,6 +245,33 @@ func TestPreviewReply(t *testing.T) {
 	tt.Frame()
 	if _, ok := tt.Find("预览网页"); ok {
 		t.Error("a button under a reply of a code block")
+	}
+}
+
+func TestDownloadReply(t *testing.T) {
+	a, _ := testApp(t)
+	a.addModel(presets[2])
+	dir := t.TempDir()
+	var asked []string
+	a.saveAs = func(d, name string) (string, error) {
+		asked = append(asked, name)
+		return filepath.Join(dir, name), nil
+	}
+	replyWith(a, "<!DOCTYPE html>\n<html><body><p>没有标题</p></body></html>")
+	tt := ui.NewTester(a.view, 1080, 720)
+	a.send("只输出 HTML")
+	tt.Frame()
+	tt.Click("预览网页")
+	tt.Frame()
+	if err := tt.Click("下载 HTML 文件"); err != nil {
+		t.Fatalf("%v: texts %q", err, tt.Texts())
+	}
+	tt.Frame()
+	if len(asked) != 1 || asked[0] != "网页.html" {
+		t.Fatalf("asked %q", asked)
+	}
+	if b, err := os.ReadFile(filepath.Join(dir, "网页.html")); err != nil || string(b) != "\uFEFF<!DOCTYPE html>\n<html><body><p>没有标题</p></body></html>" {
+		t.Errorf("file %q, %v", b, err)
 	}
 }
 

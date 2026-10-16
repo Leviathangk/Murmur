@@ -25,6 +25,7 @@ const previewBase = "https://preview.invalid/"
 type page struct {
 	title string
 	html  string
+	svg   bool
 }
 
 // codePage returns the page a code block in lang shows, and whether it
@@ -34,7 +35,7 @@ func codePage(lang, code string) (page, bool) {
 	case "html", "htm", "xhtml":
 		return page{title: pageTitle(code, "HTML 预览"), html: code}, true
 	case "svg":
-		return page{title: "SVG 预览", html: svgPage + code}, true
+		return page{title: "SVG 预览", html: svgPage + code, svg: true}, true
 	}
 	return page{}, false
 }
@@ -96,10 +97,12 @@ func pageOf(m *Message) *page {
 }
 
 // codeBlock builds the code blocks of replies: one of HTML or SVG has a
-// button previewing it beside the copy button, which waits, as that one
-// does, for the block to be written.
+// button previewing it beside the copy button, and one of HTML a button
+// downloading it, which wait, as that one does, for the block to be
+// written.
 func (a *app) codeBlock(c *ui.Context, b *markdown.CodeBlockView) {
-	if _, ok := codePage(b.Language, ""); !ok {
+	kind, ok := codePage(b.Language, "")
+	if !ok {
 		markdown.DefaultCodeBlock(c, b)
 		return
 	}
@@ -112,17 +115,24 @@ func (a *app) codeBlock(c *ui.Context, b *markdown.CodeBlockView) {
 		ui.Row(c).AlignItems(ui.Center).Padding(em(0.35), em(0.4), 0, em(th.CodeBlockPadding)).Children(func() {
 			ui.Text(c, b.Language).FontSize(em(0.8)).TextColor(th.Muted).Unselectable()
 			ui.Spacer(c)
-			btn := ui.ButtonBase(c.Key("preview")).Padding(em(0.2), em(0.45)).Radius(5).Gap(em(0.3)).Label("预览").Disabled(b.Open)
-			if btn.Hovered() && !b.Open {
-				btn.Background(th.Text.Alpha(0.08))
+			button := func(key string, svg *ui.SVG, label string) bool {
+				btn := ui.ButtonBase(c.Key(key)).Padding(em(0.2), em(0.45)).Radius(5).Gap(em(0.3)).Label(label).Disabled(b.Open)
+				if btn.Hovered() && !b.Open {
+					btn.Background(th.Text.Alpha(0.08))
+				}
+				btn.Children(func() {
+					ui.Icon(c, svg).Size(em(0.95), em(0.95)).TextColor(th.Muted)
+					ui.Text(c, label).FontSize(em(0.8)).TextColor(th.Muted)
+				})
+				return btn.Clicked()
 			}
-			btn.Children(func() {
-				ui.Icon(c, previewIcon).Size(em(0.95), em(0.95)).TextColor(th.Muted)
-				ui.Text(c, "预览").FontSize(em(0.8)).TextColor(th.Muted)
-			})
-			if btn.Clicked() {
+			if button("preview", previewIcon, "预览") {
 				p, _ := codePage(b.Language, b.Code())
 				a.preview(p)
+			}
+			if !kind.svg && button("download", saveIcon, "下载") {
+				p, _ := codePage(b.Language, b.Code())
+				a.download(p)
 			}
 			b.CopyButton(c)
 		})
@@ -208,6 +218,36 @@ func (a *app) openInBrowser(p page) {
 	}
 }
 
+func (a *app) download(p page) {
+	name := fileName(pageTitle(p.html, "网页")) + ".html"
+	dir := a.exportDir
+	a.spawn(func() {
+		path, err := a.saveAs(dir, name)
+		if err == nil && path == "" {
+			return
+		}
+		if err == nil {
+			err = os.WriteFile(path, htmlFile(p.html), 0o644)
+		}
+		a.update(func() {
+			if err != nil {
+				a.toast = "下载失败：" + err.Error()
+				return
+			}
+			a.exportDir, a.savedPage = filepath.Dir(path), path
+		})
+	})
+}
+
+var charsetMeta = regexp.MustCompile(`(?i)<meta\s[^>]*charset`)
+
+func htmlFile(src string) []byte {
+	if charsetMeta.MatchString(src) {
+		return []byte(src)
+	}
+	return append([]byte("\uFEFF"), src...)
+}
+
 // previewer shows the page previewed over the window, under its title.
 // A click outside, Escape or the close button closes it, and the page
 // with it, which would go on running otherwise, sounds and all; the
@@ -228,6 +268,9 @@ func (a *app) previewer(c *ui.Context) {
 					a.web.Page().LoadHTML(p.html, previewBase)
 				}
 			})
+			if !p.svg {
+				iconButton(c.Key("download"), saveIcon, "下载 HTML 文件").Shrink(0).OnClick(func() { a.download(p) })
+			}
 			iconButton(c.Key("browser"), browserIcon, "在浏览器中打开").Shrink(0).OnClick(func() { a.openInBrowser(p) })
 			iconButton(c.Key("close"), closeIcon, "关闭").Shrink(0).OnClick(func() { a.previewOpen = false })
 		})

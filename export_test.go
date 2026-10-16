@@ -199,17 +199,21 @@ func TestFileName(t *testing.T) {
 	}
 }
 
-func TestMarkdownPath(t *testing.T) {
-	for path, want := range map[string]string{
-		"a.md":       "a.md",
-		"a.MD":       "a.MD",
-		"a.markdown": "a.markdown",
-		"a":          "a.md",
-		"Go 1.22 笔记": "Go 1.22 笔记.md",
-		"a.txt":      "a.txt.md",
+func TestWithExtension(t *testing.T) {
+	for _, tc := range []struct{ path, ext, want string }{
+		{"a.md", ".md", "a.md"},
+		{"a.MD", ".md", "a.MD"},
+		{"a.markdown", ".md", "a.markdown"},
+		{"a", ".md", "a.md"},
+		{"Go 1.22 笔记", ".md", "Go 1.22 笔记.md"},
+		{"a.txt", ".md", "a.txt.md"},
+		{"a.html", ".html", "a.html"},
+		{"a.HTM", ".html", "a.HTM"},
+		{"index", ".html", "index.html"},
+		{"a.md", ".html", "a.md.html"},
 	} {
-		if got := markdownPath(path); got != want {
-			t.Errorf("markdownPath(%q) = %q, want %q", path, got, want)
+		if got := withExtension(tc.path, saveKinds[tc.ext].exts); got != tc.want {
+			t.Errorf("withExtension(%q, %s) = %q, want %q", tc.path, tc.ext, got, tc.want)
 		}
 	}
 }

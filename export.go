@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
 
@@ -280,15 +281,22 @@ func reservedName(s string) bool {
 	return len(s) == 4 && (strings.HasPrefix(s, "COM") || strings.HasPrefix(s, "LPT")) && s[3] >= '1' && s[3] <= '9'
 }
 
-// markdownPath returns path ending in .md, unless it ends in .md or
-// .markdown already, as Windows' dialog adds no extension to a name typed
-// without it.
-func markdownPath(path string) string {
-	switch strings.ToLower(filepath.Ext(path)) {
-	case ".md", ".markdown":
+type saveKind struct {
+	title, button, filter string
+	exts                  []string
+}
+
+var saveKinds = map[string]saveKind{
+	".md":   {"导出对话", "导出", "Markdown", []string{"md", "markdown"}},
+	".html": {"下载 HTML 文件", "下载", "HTML", []string{"html", "htm"}},
+}
+
+func withExtension(path string, exts []string) string {
+	ext := strings.TrimPrefix(strings.ToLower(filepath.Ext(path)), ".")
+	if slices.Contains(exts, ext) {
 		return path
 	}
-	return path + ".md"
+	return path + "." + exts[0]
 }
 
 // exportChat asks where to save the chat of the given ID as Markdown, and
@@ -318,34 +326,36 @@ func (a *app) exportChat(id string) {
 	})
 }
 
-// saveAsDialog shows the system's dialog to choose where to save a
-// Markdown file, named name at first, in dir, or Downloads without one; it
-// blocks until the dialog closes, and returns "" when canceled.
+// saveAsDialog shows the system's dialog to choose where to save a file
+// of the kind its extension says, named name at first, in dir, or
+// Downloads without one; it blocks until the dialog closes, and returns ""
+// when canceled.
 func (a *app) saveAsDialog(dir, name string) (string, error) {
 	if dir == "" {
 		dir, _ = mygo.App.Path(mygo.PathDownloads)
 	}
+	k := saveKinds[filepath.Ext(name)]
 	path, err := mygo.Dialog.Save(mygo.SaveDialogOptions{
 		Parent:            a.win,
-		Title:             "导出对话",
+		Title:             k.title,
 		DefaultPath:       filepath.Join(dir, name),
-		ButtonLabel:       "导出",
-		Filters:           []mygo.FileFilter{{Name: "Markdown", Extensions: []string{"md"}}},
+		ButtonLabel:       k.button,
+		Filters:           []mygo.FileFilter{{Name: k.filter, Extensions: k.exts}},
 		CreateDirectories: true,
 	})
 	if err != nil || path == "" {
 		return "", err
 	}
-	md := markdownPath(path)
-	if md == path {
+	full := withExtension(path, k.exts)
+	if full == path {
 		return path, nil
 	}
 	// The dialog asked about replacing the file as named, not this one.
-	if _, err := os.Stat(md); err == nil {
+	if _, err := os.Stat(full); err == nil {
 		r, err := mygo.Dialog.Message(mygo.MessageOptions{
 			Parent:        a.win,
 			Type:          mygo.MessageWarning,
-			Message:       "「" + filepath.Base(md) + "」已存在，要替换它吗？",
+			Message:       "「" + filepath.Base(full) + "」已存在，要替换它吗？",
 			Buttons:       []string{"替换", "取消"},
 			DefaultButton: 1,
 			CancelButton:  1,
@@ -354,20 +364,25 @@ func (a *app) saveAsDialog(dir, name string) (string, error) {
 			return "", err
 		}
 	}
-	return md, nil
+	return full, nil
 }
 
-// exportToast tells that a chat was exported, with a button showing the
-// file in the file manager.
+// exportToast tells that a chat was exported, or a page downloaded, with a
+// button showing the file in the file manager.
 func (a *app) exportToast(c *ui.Context) {
-	if a.exported == "" {
+	savedToast(c, &a.exported, "已导出")
+	savedToast(c, &a.savedPage, "已下载")
+}
+
+func savedToast(c *ui.Context, saved *string, verb string) {
+	if *saved == "" {
 		return
 	}
-	path := a.exported
-	a.exported = ""
+	path := *saved
+	*saved = ""
 	reveal := "在访达中显示"
 	if runtime.GOOS == "windows" {
 		reveal = "在资源管理器中显示"
 	}
-	c.ToastAction("已导出「"+filepath.Base(path)+"」", reveal, func() { mygo.Shell.ShowItemInFolder(path) })
+	c.ToastAction(verb+"「"+filepath.Base(path)+"」", reveal, func() { mygo.Shell.ShowItemInFolder(path) })
 }
