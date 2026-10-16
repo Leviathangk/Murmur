@@ -79,6 +79,8 @@ func TestClaudeThinkingOf(t *testing.T) {
 		"claude-opus-4-8":            thinkAdaptive,
 		"claude-sonnet-4-6":          thinkAdaptive,
 		"claude-opus-5-5":            thinkAlways,
+		"claude-sonnet-5-5":          thinkBetweenTools,
+		"claude-sonnet-6":            thinkBetweenTools,
 		"claude-fable-5-1":           thinkAlways,
 		"claude-haiku-4-5":           thinkBudget,
 		"claude-sonnet-4-5-20250929": thinkBudget,
@@ -416,6 +418,16 @@ func TestAnthropicStream(t *testing.T) {
 	collect(t, cfg, Request{Messages: []Message{{Role: "user", Content: "hi"}}})
 	if th, _ := json.Marshal(body["thinking"]); string(th) != `{"type":"disabled"}` {
 		t.Errorf("thinking off %s", th)
+	}
+
+	cfg.Model = "claude-sonnet-5-5"
+	collect(t, cfg, Request{Messages: []Message{{Role: "user", Content: "hi"}}})
+	if th, _ := json.Marshal(body["thinking"]); string(th) != `{"type":"between_tools"}` {
+		t.Errorf("thinking off on Sonnet 5.5 %s", th)
+	}
+	collect(t, cfg, Request{Messages: []Message{{Role: "user", Content: "hi"}}, Thinking: true})
+	if th, _ := json.Marshal(body["thinking"]); string(th) != `{"display":"summarized","type":"adaptive"}` {
+		t.Errorf("thinking on Sonnet 5.5 %s", th)
 	}
 
 	// Models that cannot stop thinking think less instead.

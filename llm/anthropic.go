@@ -28,6 +28,7 @@ const (
 	// thinkAlways takes {type: adaptive} and cannot stop thinking: lower
 	// effort is the way to think less.
 	thinkAlways
+	thinkBetweenTools
 )
 
 var claudeModel = regexp.MustCompile(`claude-(opus|sonnet|haiku|fable|mythos)-(\d+)(?:-(\d{1,2}))?(?:[^0-9]|$)`)
@@ -46,6 +47,8 @@ func claudeThinkingOf(model string) claudeThinking {
 		return thinkAlways
 	case family == "opus" && (major > 5 || major == 5 && minor >= 5):
 		return thinkAlways
+	case family == "sonnet" && (major > 5 || major == 5 && minor >= 5):
+		return thinkBetweenTools
 	case major > 4 || major == 4 && minor >= 6:
 		return thinkAdaptive
 	}
@@ -116,6 +119,9 @@ func streamAnthropic(ctx context.Context, client *http.Client, cfg Config, req R
 		params.Thinking = anthropic.ThinkingConfigParamUnion{OfAdaptive: &adaptive}
 	case kind == thinkAdaptive:
 		params.Thinking = anthropic.ThinkingConfigParamUnion{OfDisabled: &anthropic.ThinkingConfigDisabledParam{}}
+	case kind == thinkBetweenTools:
+		off := anthropic.NewThinkingConfigBetweenToolsParam()
+		params.Thinking = anthropic.ThinkingConfigParamUnion{OfBetweenTools: &off}
 	case kind == thinkAlways:
 		params.OutputConfig = anthropic.OutputConfigParam{Effort: anthropic.OutputConfigEffortLow}
 	}
