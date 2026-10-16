@@ -156,7 +156,7 @@ func TestInterfaceTranslated(t *testing.T) {
 			a.stream = func(ctx context.Context, cfg llm.Config, req llm.Request, emit func(llm.Event)) error {
 				emit(llm.Event{Reasoning: "The user says hello."})
 				for _, tool := range req.Tools {
-					tool.Run(ctx, json.RawMessage(`{"query":"Murmur"}`))
+					tool.Run(ctx, json.RawMessage(`{"query":"Murmur","url":"https://github.com/Qsnh/Murmur"}`))
 				}
 				emit(llm.Event{Text: "Hello!\n\n```html\n<h1>Hi</h1>\n```"})
 				emit(llm.Event{Usage: &llm.Usage{Input: 1234, Output: 56}})
@@ -182,7 +182,7 @@ func TestInterfaceTranslated(t *testing.T) {
 				options = append(options, p.name())
 			}
 			check("options", options)
-			a.settings.TavilyKey = "tvly-test"
+			a.settings.TinyFishKey = "sk-tinyfish-test"
 			click(t, tt, locales.SettingsChat())
 			click(t, tt, locales.WebSearchTest())
 			if !tt.HasText(locales.WebSearchTestSucceeded(1)) {
@@ -207,6 +207,7 @@ func TestInterfaceTranslated(t *testing.T) {
 				t.Errorf("no %q in %q", want, tt.Texts())
 			}
 			click(t, tt, locales.SearchStep("Murmur", 1))
+			click(t, tt, locales.ReadStep("Murmur"))
 			check("sources", tt.Texts())
 			if !tt.HasText("[1]") {
 				t.Errorf("no search in %q", tt.Texts())

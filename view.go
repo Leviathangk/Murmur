@@ -455,7 +455,7 @@ func (a *app) thinking(c *ui.Context, m *Message) {
 }
 
 func (a *app) steps(c *ui.Context, m *Message) {
-	reasoning, content, searches := 0, 0, 0
+	reasoning, content, searches, reads := 0, 0, 0, 0
 	for i, s := range m.Steps {
 		last := i == len(m.Steps)-1
 		switch s.Kind {
@@ -486,6 +486,15 @@ func (a *app) steps(c *ui.Context, m *Message) {
 				spinnerRow(c.Key(i), locales.SearchingNow(m.searching)).Padding(5, 0)
 			}
 			searches++
+		case stepRead:
+			switch {
+			case reads < len(m.Reads):
+				read := m.Reads[reads]
+				ui.Column(c.Key(i)).Children(func() { a.readStep(c, m, read) })
+			case m.reading != "" && last:
+				spinnerRow(c.Key(i), locales.ReadingNow(shortURL(m.reading))).Padding(5, 0)
+			}
+			reads++
 		}
 	}
 }
@@ -507,7 +516,7 @@ func thought(c *ui.Context, open *bool, label, text string) {
 }
 
 func (a *app) activity(c *ui.Context, m *Message) {
-	if m.writing || m.searching != "" || !m.thinkStart.IsZero() {
+	if m.writing || m.searching != "" || m.reading != "" || !m.thinkStart.IsZero() {
 		return
 	}
 	spinnerRow(c, locales.ReplyWaiting())

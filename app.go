@@ -80,7 +80,8 @@ type app struct {
 
 	// stream calls the model; tests replace it.
 	stream    func(ctx context.Context, cfg llm.Config, req llm.Request, emit func(llm.Event)) error
-	webSearch func(ctx context.Context, key, proxy, query string) ([]websearch.Result, error)
+	webSearch func(ctx context.Context, w web, query string) ([]websearch.Result, error)
+	readPage  func(ctx context.Context, w web, link string) (*websearch.Page, error)
 	// applyTheme shows the app in an appearance; tests replace it.
 	applyTheme    func(mygo.ThemeSource)
 	applyLanguage func(string)
@@ -102,7 +103,7 @@ type app struct {
 }
 
 func newApp(s store) *app {
-	a := &app{store: s, stream: llm.Stream, webSearch: tavilySearch, applyTheme: mygo.Theme.SetSource, applyLanguage: mygo.App.SetLocale}
+	a := &app{store: s, stream: llm.Stream, webSearch: searchWeb, readPage: fetchPage, applyTheme: mygo.Theme.SetSource, applyLanguage: mygo.App.SetLocale}
 	a.openFiles, a.saveAs, a.notify = a.openFilesDialog, a.saveAsDialog, a.notifyDesktop
 	a.openPath = mygo.Shell.OpenPath
 	a.md.CodeBlock = a.codeBlock
@@ -256,10 +257,11 @@ func (a *app) reply(c *Chat, m *Model) {
 	var s *searcher
 	fallbackSystem := ""
 	if a.searchOn() {
-		s = &searcher{a: a, reply: reply, key: strings.TrimSpace(a.settings.TavilyKey), proxy: a.settings.Proxy}
+		s = &searcher{a: a, reply: reply, web: a.searchService()}
+		s.know(c.Messages)
 		now := time.Now()
 		req.System = searchPrompt(a.settings.SystemPrompt, now, true)
-		req.Tools = []llm.Tool{s.tool()}
+		req.Tools = s.tools()
 		fallbackSystem = searchPrompt(a.settings.SystemPrompt, now, false)
 	}
 	system := a.settings.SystemPrompt
@@ -385,7 +387,7 @@ func (a *app) fork(c *Chat, i int) {
 		m := *m
 		m.Images, m.Documents = slices.Clone(m.Images), slices.Clone(m.Documents)
 		m.key, m.thinkOpen = a.newKey(), false
-		m.Steps, m.Searches = slices.Clone(m.Steps), slices.Clone(m.Searches)
+		m.Steps, m.Searches, m.Reads = slices.Clone(m.Steps), slices.Clone(m.Searches), slices.Clone(m.Reads)
 		for j, s := range m.Steps {
 			s := *s
 			s.open = false
@@ -395,6 +397,11 @@ func (a *app) fork(c *Chat, i int) {
 			s := *s
 			s.open = false
 			m.Searches[j] = &s
+		}
+		for j, r := range m.Reads {
+			r := *r
+			r.open = false
+			m.Reads[j] = &r
 		}
 		f.Messages = append(f.Messages, &m)
 	}

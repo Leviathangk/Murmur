@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -69,8 +70,10 @@ type Settings struct {
 	// front, in system notifications.
 	Notify bool `json:"notify"`
 
-	WebSearch bool   `json:"web_search,omitempty"`
-	TavilyKey string `json:"tavily_api_key,omitempty"`
+	WebSearch     bool   `json:"web_search,omitempty"`
+	SearchService string `json:"search_service,omitempty"`
+	TavilyKey     string `json:"tavily_api_key,omitempty"`
+	TinyFishKey   string `json:"tinyfish_api_key,omitempty"`
 }
 
 // model returns the model of the given ID, or nil.
@@ -100,6 +103,7 @@ type Message struct {
 	OutputTokens int `json:"output_tokens,omitempty"`
 
 	Searches []*Search `json:"searches,omitempty"`
+	Reads    []*Read   `json:"reads,omitempty"`
 	Sources  []*Source `json:"sources,omitempty"`
 	Steps    []*Step   `json:"steps,omitempty"`
 
@@ -111,6 +115,7 @@ type Message struct {
 	pageSought bool      // page was looked for
 
 	searching   string
+	reading     string
 	sourcesOpen bool
 	writing     bool
 }
@@ -121,6 +126,7 @@ const (
 	stepThink  stepKind = "think"
 	stepText   stepKind = "text"
 	stepSearch stepKind = "search"
+	stepRead   stepKind = "read"
 )
 
 type Step struct {
@@ -134,7 +140,7 @@ type Step struct {
 func (m *Message) step(kind stepKind) *Step {
 	if n := len(m.Steps); n > 0 {
 		last := m.Steps[n-1]
-		if last.Kind == kind && kind != stepSearch {
+		if last.Kind == kind && (kind == stepThink || kind == stepText) {
 			return last
 		}
 		if last.Kind == stepThink {
@@ -144,6 +150,12 @@ func (m *Message) step(kind stepKind) *Step {
 	s := &Step{Kind: kind, open: kind == stepThink}
 	m.Steps = append(m.Steps, s)
 	return s
+}
+
+func (m *Message) dropStep(kind stepKind) {
+	if n := len(m.Steps); n > 0 && m.Steps[n-1].Kind == kind {
+		m.Steps = m.Steps[:n-1]
+	}
 }
 
 func (m *Message) think(now time.Time, s string) {
@@ -234,6 +246,12 @@ func (s store) write(name string, v any) error {
 func (s store) loadSettings() *Settings {
 	st := &Settings{Thinking: true, Notify: true}
 	s.read("settings.json", st)
+	if !slices.Contains(searchServices, st.SearchService) {
+		st.SearchService = tinyFish
+		if strings.TrimSpace(st.TavilyKey) != "" {
+			st.SearchService = tavily
+		}
+	}
 	return st
 }
 

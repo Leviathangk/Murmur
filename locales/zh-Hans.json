@@ -108,6 +108,30 @@
       }
     }
   },
+  "readingNow": "正在读取：{page}",
+  "@readingNow": {
+    "placeholders": {
+      "page": {
+        "type": "String"
+      }
+    }
+  },
+  "readStep": "已读取「{page}」",
+  "@readStep": {
+    "placeholders": {
+      "page": {
+        "type": "String"
+      }
+    }
+  },
+  "readStepFailed": "读取「{page}」失败",
+  "@readStepFailed": {
+    "placeholders": {
+      "page": {
+        "type": "String"
+      }
+    }
+  },
   "searchNoResults": "没有结果",
   "searchAllFailed": "联网搜索失败",
   "searchFailed": "搜索失败：{error}",
@@ -181,8 +205,15 @@
   "thinkHigh": "高",
   "thinkHighHint": "想得更久，适合难题",
   "composerSearch": "联网搜索",
-  "composerSearchTooltip": "让模型回答前先在网上搜索",
-  "searchNeedsKey": "先在设置里填写 Tavily API Key，才能联网搜索",
+  "composerSearchTooltip": "让模型回答前先在网上搜索、读网页",
+  "searchNeedsKey": "先在设置里填写 {service} API Key，才能联网搜索",
+  "@searchNeedsKey": {
+    "placeholders": {
+      "service": {
+        "type": "String"
+      }
+    }
+  },
   "attachmentRemoveFile": "移除文件",
   "attachmentRemoveImage": "移除图片",
   "attachTooManyImages": "一条消息最多 {count} 张图片",
@@ -453,8 +484,12 @@
   "proxyPlaceholder": "http://127.0.0.1:7890 或 socks5://127.0.0.1:1080",
   "proxyHint": "留空则直连；支持 http、https、socks5。检查和下载更新也走这个代理",
   "chatWebSearch": "联网搜索",
-  "webSearchKeyPlaceholder": "Tavily API Key，以 tvly- 开头",
-  "webSearchHint": "用 Tavily 搜索：在 tavily.com 注册即可免费获得 API Key，每月 1000 次。搜索词会发给 Tavily，也走网络代理",
+  "webSearchService": "搜索服务",
+  "tinyFishOption": "TinyFish（免费）",
+  "tinyFishKeyPlaceholder": "TinyFish API Key，以 sk-tinyfish- 开头",
+  "tinyFishHint": "在 agent.tinyfish.ai 注册即可免费获得 API Key，搜索和读网页都不收费：每小时可搜 500 次，每天可读 1000 个网页。搜索词和要读的网址会发给 TinyFish，也走网络代理",
+  "tavilyKeyPlaceholder": "Tavily API Key，以 tvly- 开头",
+  "tavilyHint": "在 tavily.com 注册即可免费获得 API Key，每月 1000 次额度：搜一次用 1 次，每读 5 个网页用 1 次。搜索词和要读的网址会发给 Tavily，也走网络代理",
   "webSearchTest": "测试搜索",
   "webSearchTesting": "正在搜索…",
   "webSearchTestSucceeded": "可以搜索，找到 {count} 个网页",
@@ -644,25 +679,91 @@
       }
     }
   },
-  "tavilyBadKey": "Tavily API Key 无效，请在设置里检查",
-  "tavilyQuota": "Tavily 的搜索额度已用完",
-  "tavilyRateLimited": "Tavily 请求太频繁，请稍后再试",
-  "tavilyTimeout": "Tavily 没有及时响应",
-  "tavilyUnreachable": "连不上 Tavily：{error}。需要代理的话，在设置里填写网络代理",
-  "@tavilyUnreachable": {
+  "webBadKey": "{service} API Key 无效，请在设置里检查",
+  "@webBadKey": {
     "placeholders": {
+      "service": {
+        "type": "String"
+      }
+    }
+  },
+  "webQuota": "{service} 的额度已用完",
+  "@webQuota": {
+    "placeholders": {
+      "service": {
+        "type": "String"
+      }
+    }
+  },
+  "webDailyQuota": "今天的 {service} 免费次数已用完，每天 UTC 0 点恢复",
+  "@webDailyQuota": {
+    "placeholders": {
+      "service": {
+        "type": "String"
+      }
+    }
+  },
+  "webRateLimited": "{service} 请求太频繁，请稍后再试",
+  "@webRateLimited": {
+    "placeholders": {
+      "service": {
+        "type": "String"
+      }
+    }
+  },
+  "webTimeout": "{service} 没有及时响应",
+  "@webTimeout": {
+    "placeholders": {
+      "service": {
+        "type": "String"
+      }
+    }
+  },
+  "webUnreachable": "连不上 {service}：{error}。需要代理的话，在设置里填写网络代理",
+  "@webUnreachable": {
+    "placeholders": {
+      "service": {
+        "type": "String"
+      },
       "error": {
         "type": "String"
       }
     }
   },
-  "tavilyHTTPError": "Tavily 返回 HTTP {status}：{message}",
-  "@tavilyHTTPError": {
+  "webHTTPError": "{service} 返回 HTTP {status}：{message}",
+  "@webHTTPError": {
     "placeholders": {
+      "service": {
+        "type": "String"
+      },
       "status": {
         "type": "String"
       },
       "message": {
+        "type": "String"
+      }
+    }
+  },
+  "readNotFound": "网页不存在",
+  "readBlocked": "网站拦截了读取",
+  "readLogin": "要登录才能看这个网页",
+  "readTimeout": "网页加载超时",
+  "readUnreachable": "连不上这个网站",
+  "readEmpty": "网页上没有可读的文字",
+  "readTooLarge": "网页太大，读不了",
+  "readInvalidURL": "网址无效或不允许访问",
+  "readHTTPError": "网站返回 HTTP {status}",
+  "@readHTTPError": {
+    "placeholders": {
+      "status": {
+        "type": "String"
+      }
+    }
+  },
+  "readFailed": "读不了这个网页：{error}",
+  "@readFailed": {
+    "placeholders": {
+      "error": {
         "type": "String"
       }
     }

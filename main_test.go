@@ -28,8 +28,11 @@ func testApp(t *testing.T) (*app, *[]llm.Request) {
 	a := newApp(store{dir: t.TempDir()})
 	a.applyTheme = func(mygo.ThemeSource) {} // no app runs to take it
 	a.updates = &fakeUpdates{automaticChecks: true}
-	a.webSearch = func(ctx context.Context, key, proxy, query string) ([]websearch.Result, error) {
+	a.webSearch = func(ctx context.Context, w web, query string) ([]websearch.Result, error) {
 		return []websearch.Result{{Title: "Murmur", URL: "https://github.com/Qsnh/Murmur", Content: "A minimal AI chat"}}, nil
+	}
+	a.readPage = func(ctx context.Context, w web, link string) (*websearch.Page, error) {
+		return &websearch.Page{URL: link, Title: "Murmur", Text: "Murmur is a minimal AI chat."}, nil
 	}
 	var reqs []llm.Request
 	a.stream = func(ctx context.Context, cfg llm.Config, req llm.Request, emit func(llm.Event)) error {

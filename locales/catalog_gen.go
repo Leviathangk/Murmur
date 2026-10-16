@@ -499,6 +499,36 @@ func (msgs Messages) SearchStepFailed(query string) string {
 	return Catalog.Format(msgs.locale, "searchStepFailed", map[string]any{"query": query})
 }
 
+// ReadingNow says "正在读取：{page}"
+// in the language the app shows.
+func ReadingNow(page string) string { return In(i18n.Locale()).ReadingNow(page) }
+
+// ReadingNow says "正在读取：{page}"
+// in the language of msgs.
+func (msgs Messages) ReadingNow(page string) string {
+	return Catalog.Format(msgs.locale, "readingNow", map[string]any{"page": page})
+}
+
+// ReadStep says "已读取「{page}」"
+// in the language the app shows.
+func ReadStep(page string) string { return In(i18n.Locale()).ReadStep(page) }
+
+// ReadStep says "已读取「{page}」"
+// in the language of msgs.
+func (msgs Messages) ReadStep(page string) string {
+	return Catalog.Format(msgs.locale, "readStep", map[string]any{"page": page})
+}
+
+// ReadStepFailed says "读取「{page}」失败"
+// in the language the app shows.
+func ReadStepFailed(page string) string { return In(i18n.Locale()).ReadStepFailed(page) }
+
+// ReadStepFailed says "读取「{page}」失败"
+// in the language of msgs.
+func (msgs Messages) ReadStepFailed(page string) string {
+	return Catalog.Format(msgs.locale, "readStepFailed", map[string]any{"page": page})
+}
+
 // SearchNoResults says "没有结果"
 // in the language the app shows.
 func SearchNoResults() string { return In(i18n.Locale()).SearchNoResults() }
@@ -781,24 +811,24 @@ func (msgs Messages) ComposerSearch() string {
 	return Catalog.Format(msgs.locale, "composerSearch", nil)
 }
 
-// ComposerSearchTooltip says "让模型回答前先在网上搜索"
+// ComposerSearchTooltip says "让模型回答前先在网上搜索、读网页"
 // in the language the app shows.
 func ComposerSearchTooltip() string { return In(i18n.Locale()).ComposerSearchTooltip() }
 
-// ComposerSearchTooltip says "让模型回答前先在网上搜索"
+// ComposerSearchTooltip says "让模型回答前先在网上搜索、读网页"
 // in the language of msgs.
 func (msgs Messages) ComposerSearchTooltip() string {
 	return Catalog.Format(msgs.locale, "composerSearchTooltip", nil)
 }
 
-// SearchNeedsKey says "先在设置里填写 Tavily API Key，才能联网搜索"
+// SearchNeedsKey says "先在设置里填写 {service} API Key，才能联网搜索"
 // in the language the app shows.
-func SearchNeedsKey() string { return In(i18n.Locale()).SearchNeedsKey() }
+func SearchNeedsKey(service string) string { return In(i18n.Locale()).SearchNeedsKey(service) }
 
-// SearchNeedsKey says "先在设置里填写 Tavily API Key，才能联网搜索"
+// SearchNeedsKey says "先在设置里填写 {service} API Key，才能联网搜索"
 // in the language of msgs.
-func (msgs Messages) SearchNeedsKey() string {
-	return Catalog.Format(msgs.locale, "searchNeedsKey", nil)
+func (msgs Messages) SearchNeedsKey(service string) string {
+	return Catalog.Format(msgs.locale, "searchNeedsKey", map[string]any{"service": service})
 }
 
 // AttachmentRemoveFile says "移除文件"
@@ -1825,24 +1855,64 @@ func (msgs Messages) ChatWebSearch() string {
 	return Catalog.Format(msgs.locale, "chatWebSearch", nil)
 }
 
-// WebSearchKeyPlaceholder says "Tavily API Key，以 tvly- 开头"
+// WebSearchService says "搜索服务"
 // in the language the app shows.
-func WebSearchKeyPlaceholder() string { return In(i18n.Locale()).WebSearchKeyPlaceholder() }
+func WebSearchService() string { return In(i18n.Locale()).WebSearchService() }
 
-// WebSearchKeyPlaceholder says "Tavily API Key，以 tvly- 开头"
+// WebSearchService says "搜索服务"
 // in the language of msgs.
-func (msgs Messages) WebSearchKeyPlaceholder() string {
-	return Catalog.Format(msgs.locale, "webSearchKeyPlaceholder", nil)
+func (msgs Messages) WebSearchService() string {
+	return Catalog.Format(msgs.locale, "webSearchService", nil)
 }
 
-// WebSearchHint says "用 Tavily 搜索：在 tavily.com 注册即可免费获得 API Key，每月 1000 次。搜索词会发给 Tavily…"
+// TinyFishOption says "TinyFish（免费）"
 // in the language the app shows.
-func WebSearchHint() string { return In(i18n.Locale()).WebSearchHint() }
+func TinyFishOption() string { return In(i18n.Locale()).TinyFishOption() }
 
-// WebSearchHint says "用 Tavily 搜索：在 tavily.com 注册即可免费获得 API Key，每月 1000 次。搜索词会发给 Tavily…"
+// TinyFishOption says "TinyFish（免费）"
 // in the language of msgs.
-func (msgs Messages) WebSearchHint() string {
-	return Catalog.Format(msgs.locale, "webSearchHint", nil)
+func (msgs Messages) TinyFishOption() string {
+	return Catalog.Format(msgs.locale, "tinyFishOption", nil)
+}
+
+// TinyFishKeyPlaceholder says "TinyFish API Key，以 sk-tinyfish- 开头"
+// in the language the app shows.
+func TinyFishKeyPlaceholder() string { return In(i18n.Locale()).TinyFishKeyPlaceholder() }
+
+// TinyFishKeyPlaceholder says "TinyFish API Key，以 sk-tinyfish- 开头"
+// in the language of msgs.
+func (msgs Messages) TinyFishKeyPlaceholder() string {
+	return Catalog.Format(msgs.locale, "tinyFishKeyPlaceholder", nil)
+}
+
+// TinyFishHint says "在 agent.tinyfish.ai 注册即可免费获得 API Key，搜索和读网页都不收费：每小时可搜 500 …"
+// in the language the app shows.
+func TinyFishHint() string { return In(i18n.Locale()).TinyFishHint() }
+
+// TinyFishHint says "在 agent.tinyfish.ai 注册即可免费获得 API Key，搜索和读网页都不收费：每小时可搜 500 …"
+// in the language of msgs.
+func (msgs Messages) TinyFishHint() string {
+	return Catalog.Format(msgs.locale, "tinyFishHint", nil)
+}
+
+// TavilyKeyPlaceholder says "Tavily API Key，以 tvly- 开头"
+// in the language the app shows.
+func TavilyKeyPlaceholder() string { return In(i18n.Locale()).TavilyKeyPlaceholder() }
+
+// TavilyKeyPlaceholder says "Tavily API Key，以 tvly- 开头"
+// in the language of msgs.
+func (msgs Messages) TavilyKeyPlaceholder() string {
+	return Catalog.Format(msgs.locale, "tavilyKeyPlaceholder", nil)
+}
+
+// TavilyHint says "在 tavily.com 注册即可免费获得 API Key，每月 1000 次额度：搜一次用 1 次，每读 5 个网页用 …"
+// in the language the app shows.
+func TavilyHint() string { return In(i18n.Locale()).TavilyHint() }
+
+// TavilyHint says "在 tavily.com 注册即可免费获得 API Key，每月 1000 次额度：搜一次用 1 次，每读 5 个网页用 …"
+// in the language of msgs.
+func (msgs Messages) TavilyHint() string {
+	return Catalog.Format(msgs.locale, "tavilyHint", nil)
 }
 
 // WebSearchTest says "测试搜索"
@@ -2385,66 +2455,178 @@ func (msgs Messages) LlmHTTPError(status string, message string) string {
 	return Catalog.Format(msgs.locale, "llmHTTPError", map[string]any{"status": status, "message": message})
 }
 
-// TavilyBadKey says "Tavily API Key 无效，请在设置里检查"
+// WebBadKey says "{service} API Key 无效，请在设置里检查"
 // in the language the app shows.
-func TavilyBadKey() string { return In(i18n.Locale()).TavilyBadKey() }
+func WebBadKey(service string) string { return In(i18n.Locale()).WebBadKey(service) }
 
-// TavilyBadKey says "Tavily API Key 无效，请在设置里检查"
+// WebBadKey says "{service} API Key 无效，请在设置里检查"
 // in the language of msgs.
-func (msgs Messages) TavilyBadKey() string {
-	return Catalog.Format(msgs.locale, "tavilyBadKey", nil)
+func (msgs Messages) WebBadKey(service string) string {
+	return Catalog.Format(msgs.locale, "webBadKey", map[string]any{"service": service})
 }
 
-// TavilyQuota says "Tavily 的搜索额度已用完"
+// WebQuota says "{service} 的额度已用完"
 // in the language the app shows.
-func TavilyQuota() string { return In(i18n.Locale()).TavilyQuota() }
+func WebQuota(service string) string { return In(i18n.Locale()).WebQuota(service) }
 
-// TavilyQuota says "Tavily 的搜索额度已用完"
+// WebQuota says "{service} 的额度已用完"
 // in the language of msgs.
-func (msgs Messages) TavilyQuota() string {
-	return Catalog.Format(msgs.locale, "tavilyQuota", nil)
+func (msgs Messages) WebQuota(service string) string {
+	return Catalog.Format(msgs.locale, "webQuota", map[string]any{"service": service})
 }
 
-// TavilyRateLimited says "Tavily 请求太频繁，请稍后再试"
+// WebDailyQuota says "今天的 {service} 免费次数已用完，每天 UTC 0 点恢复"
 // in the language the app shows.
-func TavilyRateLimited() string { return In(i18n.Locale()).TavilyRateLimited() }
+func WebDailyQuota(service string) string { return In(i18n.Locale()).WebDailyQuota(service) }
 
-// TavilyRateLimited says "Tavily 请求太频繁，请稍后再试"
+// WebDailyQuota says "今天的 {service} 免费次数已用完，每天 UTC 0 点恢复"
 // in the language of msgs.
-func (msgs Messages) TavilyRateLimited() string {
-	return Catalog.Format(msgs.locale, "tavilyRateLimited", nil)
+func (msgs Messages) WebDailyQuota(service string) string {
+	return Catalog.Format(msgs.locale, "webDailyQuota", map[string]any{"service": service})
 }
 
-// TavilyTimeout says "Tavily 没有及时响应"
+// WebRateLimited says "{service} 请求太频繁，请稍后再试"
 // in the language the app shows.
-func TavilyTimeout() string { return In(i18n.Locale()).TavilyTimeout() }
+func WebRateLimited(service string) string { return In(i18n.Locale()).WebRateLimited(service) }
 
-// TavilyTimeout says "Tavily 没有及时响应"
+// WebRateLimited says "{service} 请求太频繁，请稍后再试"
 // in the language of msgs.
-func (msgs Messages) TavilyTimeout() string {
-	return Catalog.Format(msgs.locale, "tavilyTimeout", nil)
+func (msgs Messages) WebRateLimited(service string) string {
+	return Catalog.Format(msgs.locale, "webRateLimited", map[string]any{"service": service})
 }
 
-// TavilyUnreachable says "连不上 Tavily：{error}。需要代理的话，在设置里填写网络代理"
+// WebTimeout says "{service} 没有及时响应"
 // in the language the app shows.
-func TavilyUnreachable(error string) string { return In(i18n.Locale()).TavilyUnreachable(error) }
+func WebTimeout(service string) string { return In(i18n.Locale()).WebTimeout(service) }
 
-// TavilyUnreachable says "连不上 Tavily：{error}。需要代理的话，在设置里填写网络代理"
+// WebTimeout says "{service} 没有及时响应"
 // in the language of msgs.
-func (msgs Messages) TavilyUnreachable(error string) string {
-	return Catalog.Format(msgs.locale, "tavilyUnreachable", map[string]any{"error": error})
+func (msgs Messages) WebTimeout(service string) string {
+	return Catalog.Format(msgs.locale, "webTimeout", map[string]any{"service": service})
 }
 
-// TavilyHTTPError says "Tavily 返回 HTTP {status}：{message}"
+// WebUnreachable says "连不上 {service}：{error}。需要代理的话，在设置里填写网络代理"
 // in the language the app shows.
-func TavilyHTTPError(status string, message string) string {
-	return In(i18n.Locale()).TavilyHTTPError(status, message)
+func WebUnreachable(service string, error string) string {
+	return In(i18n.Locale()).WebUnreachable(service, error)
 }
 
-// TavilyHTTPError says "Tavily 返回 HTTP {status}：{message}"
+// WebUnreachable says "连不上 {service}：{error}。需要代理的话，在设置里填写网络代理"
 // in the language of msgs.
-func (msgs Messages) TavilyHTTPError(status string, message string) string {
-	return Catalog.Format(msgs.locale, "tavilyHTTPError", map[string]any{"status": status, "message": message})
+func (msgs Messages) WebUnreachable(service string, error string) string {
+	return Catalog.Format(msgs.locale, "webUnreachable", map[string]any{"service": service, "error": error})
+}
+
+// WebHTTPError says "{service} 返回 HTTP {status}：{message}"
+// in the language the app shows.
+func WebHTTPError(service string, status string, message string) string {
+	return In(i18n.Locale()).WebHTTPError(service, status, message)
+}
+
+// WebHTTPError says "{service} 返回 HTTP {status}：{message}"
+// in the language of msgs.
+func (msgs Messages) WebHTTPError(service string, status string, message string) string {
+	return Catalog.Format(msgs.locale, "webHTTPError", map[string]any{"service": service, "status": status, "message": message})
+}
+
+// ReadNotFound says "网页不存在"
+// in the language the app shows.
+func ReadNotFound() string { return In(i18n.Locale()).ReadNotFound() }
+
+// ReadNotFound says "网页不存在"
+// in the language of msgs.
+func (msgs Messages) ReadNotFound() string {
+	return Catalog.Format(msgs.locale, "readNotFound", nil)
+}
+
+// ReadBlocked says "网站拦截了读取"
+// in the language the app shows.
+func ReadBlocked() string { return In(i18n.Locale()).ReadBlocked() }
+
+// ReadBlocked says "网站拦截了读取"
+// in the language of msgs.
+func (msgs Messages) ReadBlocked() string {
+	return Catalog.Format(msgs.locale, "readBlocked", nil)
+}
+
+// ReadLogin says "要登录才能看这个网页"
+// in the language the app shows.
+func ReadLogin() string { return In(i18n.Locale()).ReadLogin() }
+
+// ReadLogin says "要登录才能看这个网页"
+// in the language of msgs.
+func (msgs Messages) ReadLogin() string {
+	return Catalog.Format(msgs.locale, "readLogin", nil)
+}
+
+// ReadTimeout says "网页加载超时"
+// in the language the app shows.
+func ReadTimeout() string { return In(i18n.Locale()).ReadTimeout() }
+
+// ReadTimeout says "网页加载超时"
+// in the language of msgs.
+func (msgs Messages) ReadTimeout() string {
+	return Catalog.Format(msgs.locale, "readTimeout", nil)
+}
+
+// ReadUnreachable says "连不上这个网站"
+// in the language the app shows.
+func ReadUnreachable() string { return In(i18n.Locale()).ReadUnreachable() }
+
+// ReadUnreachable says "连不上这个网站"
+// in the language of msgs.
+func (msgs Messages) ReadUnreachable() string {
+	return Catalog.Format(msgs.locale, "readUnreachable", nil)
+}
+
+// ReadEmpty says "网页上没有可读的文字"
+// in the language the app shows.
+func ReadEmpty() string { return In(i18n.Locale()).ReadEmpty() }
+
+// ReadEmpty says "网页上没有可读的文字"
+// in the language of msgs.
+func (msgs Messages) ReadEmpty() string {
+	return Catalog.Format(msgs.locale, "readEmpty", nil)
+}
+
+// ReadTooLarge says "网页太大，读不了"
+// in the language the app shows.
+func ReadTooLarge() string { return In(i18n.Locale()).ReadTooLarge() }
+
+// ReadTooLarge says "网页太大，读不了"
+// in the language of msgs.
+func (msgs Messages) ReadTooLarge() string {
+	return Catalog.Format(msgs.locale, "readTooLarge", nil)
+}
+
+// ReadInvalidURL says "网址无效或不允许访问"
+// in the language the app shows.
+func ReadInvalidURL() string { return In(i18n.Locale()).ReadInvalidURL() }
+
+// ReadInvalidURL says "网址无效或不允许访问"
+// in the language of msgs.
+func (msgs Messages) ReadInvalidURL() string {
+	return Catalog.Format(msgs.locale, "readInvalidURL", nil)
+}
+
+// ReadHTTPError says "网站返回 HTTP {status}"
+// in the language the app shows.
+func ReadHTTPError(status string) string { return In(i18n.Locale()).ReadHTTPError(status) }
+
+// ReadHTTPError says "网站返回 HTTP {status}"
+// in the language of msgs.
+func (msgs Messages) ReadHTTPError(status string) string {
+	return Catalog.Format(msgs.locale, "readHTTPError", map[string]any{"status": status})
+}
+
+// ReadFailed says "读不了这个网页：{error}"
+// in the language the app shows.
+func ReadFailed(error string) string { return In(i18n.Locale()).ReadFailed(error) }
+
+// ReadFailed says "读不了这个网页：{error}"
+// in the language of msgs.
+func (msgs Messages) ReadFailed(error string) string {
+	return Catalog.Format(msgs.locale, "readFailed", map[string]any{"error": error})
 }
 
 // ExtractOldWord says "旧版 Word 文档请另存为 .docx 后再添加"

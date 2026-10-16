@@ -254,7 +254,7 @@ func (a *app) chatSettings(c *ui.Context) {
 				ui.Field(c, locales.ChatSystemPrompt(), func() {
 					ui.TextArea(c.Key("system"), &a.settings.SystemPrompt).Lines(4, 12).Placeholder(locales.SystemPromptPlaceholder())
 				})
-				ui.Field(c, locales.ChatWebSearch(), func() { a.searchSettings(c) }).Description(locales.WebSearchHint())
+				ui.Field(c, locales.ChatWebSearch(), func() { a.searchSettings(c) }).Description(a.searchHint())
 			})
 		})
 	})
