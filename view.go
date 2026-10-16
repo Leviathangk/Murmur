@@ -8,7 +8,6 @@ import (
 
 	"github.com/egoist/mygo/transfer"
 	"github.com/egoist/mygo/ui"
-	"github.com/egoist/mygo/ui/markdown"
 
 	"github.com/Qsnh/Murmur/llm"
 	"github.com/Qsnh/Murmur/locales"
@@ -422,11 +421,8 @@ func (a *app) message(c *ui.Context, ch *Chat, i int) {
 				if len(m.Searches) > 0 {
 					a.searches(c, m)
 				}
-				switch {
-				case m.Content != "" && m.streaming:
-					markdown.Stream(c, m.Content, &a.md)
-				case m.Content != "":
-					markdown.View(c, m.Content, &a.md)
+				if m.Content != "" {
+					a.markdown(c, m.Content, m.streaming)
 				}
 			}
 			if m.streaming {
@@ -479,11 +475,7 @@ func (a *app) steps(c *ui.Context, m *Message) {
 			from := content
 			content = min(content+s.Size, len(m.Content))
 			ui.Column(c.Key(i)).Children(func() {
-				if m.streaming && last {
-					markdown.Stream(c, m.Content[from:content], &a.md)
-				} else {
-					markdown.View(c, m.Content[from:content], &a.md)
-				}
+				a.markdown(c, m.Content[from:content], m.streaming && last)
 			})
 		case stepSearch:
 			switch {

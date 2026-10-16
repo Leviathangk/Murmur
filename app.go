@@ -46,6 +46,7 @@ type app struct {
 
 	collapsed bool // the sidebar is hidden
 	md        markdown.Options
+	formulas  formulaCache
 
 	search      string    // what is searched for in the sidebar
 	searchInput ui.Handle // the field it is typed in
@@ -105,6 +106,8 @@ func newApp(s store) *app {
 	a.openFiles, a.saveAs, a.notify = a.openFilesDialog, a.saveAsDialog, a.notifyDesktop
 	a.openPath = mygo.Shell.OpenPath
 	a.md.CodeBlock = a.codeBlock
+	a.md.Extensions = mathExtensions
+	a.md.Math = a.formula
 	a.settings = s.loadSettings()
 	a.chats = s.loadChats()
 	s.checkDocuments(a.chats)

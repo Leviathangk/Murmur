@@ -18,7 +18,7 @@ import (
 // message of c. Its ID is the chat's, which a click opens, and a newer
 // reply of the chat replaces it.
 func replyNotification(c *Chat, reply *Message) mygo.NotificationOptions {
-	body := preview(reply.Content)
+	body := preview(plainFormulas(reply.Content))
 	switch {
 	case reply.Error != "":
 		body = locales.NotifyReplyFailed(preview(reply.Error))
