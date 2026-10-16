@@ -121,12 +121,19 @@ func TestChat(t *testing.T) {
 	}
 
 	// Thinking off: the next request asks for none.
+	if !tt.HasText("· 中") {
+		t.Errorf("no thinking level in %q", tt.Texts())
+	}
 	if err := tt.Click("深度思考"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
+	if err := tt.Click("不思考"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
 	if a.settings.Thinking {
-		t.Fatal("thinking still on after a click")
+		t.Fatal("thinking still on after choosing none")
 	}
 	if err := tt.Click("消息"); err != nil {
 		t.Fatal(err)
@@ -150,6 +157,50 @@ func TestChat(t *testing.T) {
 	}
 	if len(b.settings.Models) != 1 || b.settings.Models[0].APIKey != "sk-test" || b.settings.Thinking {
 		t.Errorf("loaded settings %+v", b.settings)
+	}
+}
+
+func TestThinkingEffort(t *testing.T) {
+	a, reqs := testApp(t)
+	a.addModel(presets[2])
+	tt := ui.NewTester(a.view, 1080, 720)
+	if err := tt.Click("深度思考"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	for _, s := range []string{"不思考", "低", "中", "高", "想得更久，适合难题"} {
+		if !tt.HasText(s) {
+			t.Errorf("no %q in the menu: %q", s, tt.Texts())
+		}
+	}
+	snapshot(t, tt, "thinking-menu")
+	if err := tt.Click("高"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if !a.settings.Thinking || a.settings.Effort != llm.EffortHigh || !tt.HasText("· 高") {
+		t.Fatalf("thinking %v at %q, texts %q", a.settings.Thinking, a.settings.Effort, tt.Texts())
+	}
+	a.send("你好")
+	tt.Frame()
+	if r := (*reqs)[0]; !r.Thinking || r.Effort != llm.EffortHigh {
+		t.Errorf("request thinking %v at %q", r.Thinking, r.Effort)
+	}
+	if b := newApp(a.store); !b.settings.Thinking || b.settings.Effort != llm.EffortHigh {
+		t.Errorf("loaded thinking %v at %q", b.settings.Thinking, b.settings.Effort)
+	}
+
+	a.setThinkEffort("")
+	if a.settings.Thinking || a.thinkEffort() != "" {
+		t.Errorf("thinking %v at %q after turning it off", a.settings.Thinking, a.thinkEffort())
+	}
+	tt.Frame()
+	if tt.HasText("· 高") {
+		t.Errorf("a level shows with thinking off: %q", tt.Texts())
+	}
+	a.setThinkEffort(llm.EffortLow)
+	if !a.settings.Thinking || a.thinkEffort() != llm.EffortLow {
+		t.Errorf("thinking %v at %q", a.settings.Thinking, a.thinkEffort())
 	}
 }
 

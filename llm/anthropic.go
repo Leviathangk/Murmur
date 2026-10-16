@@ -108,7 +108,7 @@ func streamAnthropic(ctx context.Context, client *http.Client, cfg Config, req R
 	switch {
 	case req.Thinking && kind == thinkBudget:
 		// The budget must be under max_tokens, and at least 1024.
-		budget := min(maxTokens/2, 16000)
+		budget := thinkingBudget(req.Effort, maxTokens)
 		if budget >= 1024 {
 			params.Thinking = anthropic.ThinkingConfigParamOfEnabled(budget)
 		}
@@ -117,6 +117,7 @@ func streamAnthropic(ctx context.Context, client *http.Client, cfg Config, req R
 		// as a long pause.
 		adaptive := anthropic.ThinkingConfigAdaptiveParam{Display: anthropic.ThinkingConfigAdaptiveDisplaySummarized}
 		params.Thinking = anthropic.ThinkingConfigParamUnion{OfAdaptive: &adaptive}
+		params.OutputConfig = anthropic.OutputConfigParam{Effort: anthropic.OutputConfigEffort(req.Effort)}
 	case kind == thinkAdaptive:
 		params.Thinking = anthropic.ThinkingConfigParamUnion{OfDisabled: &anthropic.ThinkingConfigDisabledParam{}}
 	case kind == thinkBetweenTools:
@@ -176,6 +177,16 @@ func streamAnthropic(ctx context.Context, client *http.Client, cfg Config, req R
 		emit(Event{Usage: &Usage{Input: int(in), Output: int(usage.OutputTokens)}})
 	}
 	return nil
+}
+
+func thinkingBudget(effort Effort, maxTokens int64) int64 {
+	switch effort {
+	case EffortLow:
+		return min(maxTokens/4, 4000)
+	case EffortHigh:
+		return min(maxTokens*3/4, 32000)
+	}
+	return min(maxTokens/2, 16000)
 }
 
 // apiErrorMessage returns the message of an error the API answered with.

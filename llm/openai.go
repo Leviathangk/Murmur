@@ -51,27 +51,38 @@ func ResolveThinkStyle(style ThinkStyle, baseURL string) ThinkStyle {
 }
 
 // applyThinking sets the fields of body that turn thinking on or off in
-// the given style.
-func applyThinking(body map[string]any, style ThinkStyle, on bool) {
+// the given style, and say how hard to think.
+func applyThinking(body map[string]any, style ThinkStyle, on bool, effort Effort) {
 	switch style {
 	case ThinkEffort:
 		if on {
-			body["reasoning_effort"] = "medium"
+			body["reasoning_effort"] = string(effort)
 		}
 	case ThinkEnable:
 		body["enable_thinking"] = on
-	case ThinkType:
 		if on {
-			body["thinking"] = map[string]any{"type": "enabled"}
-		} else {
+			body["thinking_budget"] = thinkingBudgets[effort]
+		}
+	case ThinkType:
+		if !on {
 			body["thinking"] = map[string]any{"type": "disabled"}
+			break
+		}
+		body["thinking"] = map[string]any{"type": "enabled"}
+		switch effort {
+		case EffortLow:
+			body["reasoning_effort"] = "low"
+		case EffortHigh:
+			body["reasoning_effort"] = "max"
 		}
 	case ThinkOpenRouter:
 		if on {
-			body["reasoning"] = map[string]any{"effort": "medium"}
+			body["reasoning"] = map[string]any{"effort": string(effort)}
 		}
 	}
 }
+
+var thinkingBudgets = map[Effort]int{EffortLow: 2048, EffortMedium: 16384, EffortHigh: 32768}
 
 // chatURL returns the Chat Completions endpoint under base, which may be
 // the endpoint already.
@@ -132,7 +143,7 @@ func streamOpenAI(ctx context.Context, client *http.Client, cfg Config, req Requ
 			body["max_tokens"] = cfg.MaxTokens
 		}
 	}
-	applyThinking(body, ResolveThinkStyle(cfg.ThinkStyle, cfg.BaseURL), req.Thinking)
+	applyThinking(body, ResolveThinkStyle(cfg.ThinkStyle, cfg.BaseURL), req.Thinking, req.Effort)
 	var resp *http.Response
 	for {
 		var err error

@@ -38,6 +38,14 @@ const (
 	ThinkNone       ThinkStyle = "none"             // nothing sent: the model decides
 )
 
+type Effort string
+
+const (
+	EffortLow    Effort = "low"
+	EffortMedium Effort = "medium"
+	EffortHigh   Effort = "high"
+)
+
 // Config is where a model is and how to call it.
 type Config struct {
 	Protocol   Protocol
@@ -89,11 +97,12 @@ func (m Message) text() string {
 }
 
 // Request is what to send: the system prompt, the conversation, and
-// whether the model should think before it answers.
+// whether the model should think before it answers, and how hard.
 type Request struct {
 	System   string
 	Messages []Message
 	Thinking bool
+	Effort   Effort
 }
 
 // Event is a piece of the reply.
@@ -126,6 +135,9 @@ func Stream(ctx context.Context, cfg Config, req Request, emit func(Event)) erro
 	req.Messages = normalize(req.Messages)
 	if len(req.Messages) == 0 {
 		return errors.New(locales.LlmNoMessages())
+	}
+	if req.Effort != EffortLow && req.Effort != EffortHigh {
+		req.Effort = EffortMedium
 	}
 	switch cfg.Protocol {
 	case Anthropic:

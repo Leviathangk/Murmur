@@ -10,6 +10,7 @@ import (
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/markdown"
 
+	"github.com/Qsnh/Murmur/llm"
 	"github.com/Qsnh/Murmur/locales"
 )
 
@@ -583,7 +584,7 @@ func (a *app) composer(c *ui.Context, dragOver bool) {
 			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
 				iconButton(c.Key("attach"), clipIcon, locales.ComposerAttach()).OnClick(a.pickFiles)
 				a.modelPicker(c)
-				a.thinkToggle(c)
+				a.thinkPicker(c)
 				ui.Spacer(c)
 				b := ui.ButtonBase(c.Key("send")).Size(32, 32).Radius(16).Center()
 				if busy {
@@ -813,22 +814,77 @@ func menuPanel(c *ui.Context, panel ui.Element) ui.Element {
 		Shadow(0, 8, 24, 0, ui.RGBA(0, 0, 0, 0.14))
 }
 
-// thinkToggle turns thinking on and off.
-func (a *app) thinkToggle(c *ui.Context) {
+type thinkLevel struct {
+	effort     llm.Effort
+	name, hint string
+}
+
+func thinkLevels() []thinkLevel {
+	return []thinkLevel{
+		{"", locales.ThinkOff(), locales.ThinkOffHint()},
+		{llm.EffortLow, locales.ThinkLow(), locales.ThinkLowHint()},
+		{llm.EffortMedium, locales.ThinkMedium(), locales.ThinkMediumHint()},
+		{llm.EffortHigh, locales.ThinkHigh(), locales.ThinkHighHint()},
+	}
+}
+
+func (a *app) thinkEffort() llm.Effort {
+	switch e := a.settings.Effort; {
+	case !a.settings.Thinking:
+		return ""
+	case e == llm.EffortLow || e == llm.EffortHigh:
+		return e
+	}
+	return llm.EffortMedium
+}
+
+func (a *app) setThinkEffort(e llm.Effort) {
+	a.settings.Thinking = e != ""
+	if e != "" {
+		a.settings.Effort = e
+	}
+}
+
+func (a *app) thinkPicker(c *ui.Context) {
 	t := c.Theme()
-	tg := ui.ToggleBase(c.Key("thinking"), &a.settings.Thinking).Gap(5).Padding(4, 10).Radius(999).AlignItems(ui.Center).
+	effort := a.thinkEffort()
+	sel := ui.SelectBase(c.Key("thinking"), &effort)
+	sel.Trigger.Gap(5).Padding(4, 8, 4, 10).Radius(999).AlignItems(ui.Center).
 		Label(locales.ComposerThinking()).Tooltip(locales.ComposerThinkingTooltip())
-	if a.settings.Thinking {
-		tg.Background(t.Accent.Alpha(0.12)).TextColor(t.Accent).Border(1, t.Accent.Alpha(0.35))
+	if effort != "" {
+		sel.Trigger.Background(t.Accent.Alpha(0.12)).TextColor(t.Accent).Border(1, t.Accent.Alpha(0.35))
 	} else {
-		tg.TextColor(t.TextMuted).Border(1, t.Border)
-		if tg.Hovered() {
-			tg.Background(t.SurfaceHover)
+		sel.Trigger.TextColor(t.TextMuted).Border(1, t.Border)
+		if sel.Trigger.Hovered() || sel.Open() {
+			sel.Trigger.Background(t.SurfaceHover)
 		}
 	}
-	tg.Children(func() {
+	levels := thinkLevels()
+	sel.Trigger.Children(func() {
 		ui.Icon(c, bulbIcon).Size(14, 14)
-		ui.Text(c, locales.ComposerThinking()).FontSize(13)
+		ui.Text(c, locales.ComposerThinking()).FontSize(13).SingleLine()
+		for _, l := range levels {
+			if l.effort == effort && effort != "" {
+				ui.Text(c, "· "+l.name).FontSize(13).SingleLine()
+			}
+		}
+		ui.Icon(c, downIcon).Size(12, 12)
+	})
+	sel.Trigger.OnChange(func() { a.setThinkEffort(effort) })
+	sel.Popup(func(panel ui.Element) {
+		menuPanel(c, panel).MinWidth(200)
+		for _, l := range levels {
+			item := sel.Item(l.effort).Column().AlignItems(ui.Start).Padding(6, 10).Radius(6).Gap(2)
+			sub := t.TextMuted
+			if item.Highlighted() {
+				item.Background(t.Accent).TextColor(t.AccentText)
+				sub = t.AccentText.Alpha(0.75)
+			}
+			item.Children(func() {
+				ui.Text(c, l.name).FontSize(13).SingleLine()
+				ui.Text(c, l.hint).FontSize(11).TextColor(sub).SingleLine()
+			})
+		}
 	})
 }
 

@@ -39,19 +39,24 @@ CHANGELOG.md  各版本的更新说明，更新窗口里显示
 
 ## 深度思考的实现
 
-OpenAI 兼容协议下，各家打开思考的方式不一样。「思考参数」选「自动识别」时按接口地址判断，发送的内容如下：
+OpenAI 兼容协议下，各家打开思考、调节深度的方式不一样。「思考参数」选「自动识别」时按接口地址判断，发送的内容如下：
 
-| 思考参数 | 适用于 | 开 | 关 |
+| 思考参数 | 适用于 | 开（低 / 中 / 高） | 关 |
 |---|---|---|---|
-| `reasoning_effort` | OpenAI、Ollama、Gemini | `"reasoning_effort": "medium"` | 不发送 |
-| `enable_thinking` | 通义千问、硅基流动 | `"enable_thinking": true` | `false` |
-| `thinking.type` | 智谱 GLM、DeepSeek、豆包 | `"thinking": {"type": "enabled"}` | `disabled` |
-| `reasoning` | OpenRouter | `"reasoning": {"effort": "medium"}` | 不发送 |
+| `reasoning_effort` | OpenAI、Ollama、Gemini | `"reasoning_effort"`：`low` / `medium` / `high` | 不发送 |
+| `enable_thinking` | 通义千问、硅基流动 | `"enable_thinking": true`，`"thinking_budget"`：2048 / 16384 / 32768 | `false` |
+| `thinking.type` | 智谱 GLM、DeepSeek、豆包 | `"thinking": {"type": "enabled"}`，低、高另发 `"reasoning_effort"`：`low` / `max` | `disabled` |
+| `reasoning` | OpenRouter | `"reasoning": {"effort": …}`：`low` / `medium` / `high` | 不发送 |
 | 不发送 | Kimi K2 Thinking、DeepSeek Reasoner 等自带思考的模型 | — | — |
+
+`thinking.type` 的「中」不发 `reasoning_effort`：GLM-5.3 只认 `low` / `high` / `max`，DeepSeek 文档也只列了这三个；不发时用服务商的默认值（DeepSeek `high`、智谱 `max`、豆包 `medium` 或 `high`），所以「高」发 `max`，各家都不会比「中」想得少。千问的思考预算上限是 32768。
 
 思考内容从响应的 `reasoning_content` / `reasoning` 字段读取，模型如果把思考写在正文的 `<think>…</think>` 里也会被识别出来。
 
-Anthropic 协议用官方 Go SDK：Claude 4.6 及以后的模型用自适应思考（`{"type": "adaptive", "display": "summarized"}`，思考摘要实时显示），更早的 Claude 和其他兼容 Anthropic 协议的服务用思考预算（`budget_tokens`）。
+Anthropic 协议用官方 Go SDK：
+
+- Claude 4.6 及以后的模型用自适应思考（`{"type": "adaptive", "display": "summarized"}`，思考摘要实时显示），深度用 `"output_config": {"effort": …}`：`low` / `medium` / `high`。关掉时发 `{"type": "disabled"}`；Sonnet 5.5 及以后不认 `disabled`，改发 `{"type": "between_tools"}`；Opus 5.5、Fable、Mythos 关不掉思考，改发 `effort: low`
+- 更早的 Claude 和其他兼容 Anthropic 协议的服务用思考预算（`budget_tokens`）：低、中、高分别是 `max_tokens` 的 1/4、1/2、3/4，上限 4000 / 16000 / 32000；不到 1024 时不开思考
 
 ## Token 用量的实现
 

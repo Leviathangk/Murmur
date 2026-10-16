@@ -56,11 +56,12 @@ func (m *Model) config(proxy string) llm.Config {
 
 // Settings are the user's models and preferences.
 type Settings struct {
-	Models       []*Model `json:"models"`
-	Current      string   `json:"current"` // the ID of the model chats use
-	Thinking     bool     `json:"thinking"`
-	SystemPrompt string   `json:"system_prompt"`
-	Proxy        string   `json:"proxy"`
+	Models       []*Model   `json:"models"`
+	Current      string     `json:"current"` // the ID of the model chats use
+	Thinking     bool       `json:"thinking"`
+	Effort       llm.Effort `json:"thinking_effort,omitempty"`
+	SystemPrompt string     `json:"system_prompt"`
+	Proxy        string     `json:"proxy"`
 	// Theme is the appearance chosen; empty follows the system.
 	Theme    mygo.ThemeSource `json:"theme,omitempty"`
 	Language string           `json:"language,omitempty"`

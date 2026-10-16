@@ -599,14 +599,94 @@ func (msgs Messages) ComposerThinking() string {
 	return Catalog.Format(msgs.locale, "composerThinking", nil)
 }
 
-// ComposerThinkingTooltip says "让模型先思考再回答"
+// ComposerThinkingTooltip says "选择模型回答前想多深"
 // in the language the app shows.
 func ComposerThinkingTooltip() string { return In(i18n.Locale()).ComposerThinkingTooltip() }
 
-// ComposerThinkingTooltip says "让模型先思考再回答"
+// ComposerThinkingTooltip says "选择模型回答前想多深"
 // in the language of msgs.
 func (msgs Messages) ComposerThinkingTooltip() string {
 	return Catalog.Format(msgs.locale, "composerThinkingTooltip", nil)
+}
+
+// ThinkOff says "不思考"
+// in the language the app shows.
+func ThinkOff() string { return In(i18n.Locale()).ThinkOff() }
+
+// ThinkOff says "不思考"
+// in the language of msgs.
+func (msgs Messages) ThinkOff() string {
+	return Catalog.Format(msgs.locale, "thinkOff", nil)
+}
+
+// ThinkOffHint says "直接回答"
+// in the language the app shows.
+func ThinkOffHint() string { return In(i18n.Locale()).ThinkOffHint() }
+
+// ThinkOffHint says "直接回答"
+// in the language of msgs.
+func (msgs Messages) ThinkOffHint() string {
+	return Catalog.Format(msgs.locale, "thinkOffHint", nil)
+}
+
+// ThinkLow says "低"
+// in the language the app shows.
+func ThinkLow() string { return In(i18n.Locale()).ThinkLow() }
+
+// ThinkLow says "低"
+// in the language of msgs.
+func (msgs Messages) ThinkLow() string {
+	return Catalog.Format(msgs.locale, "thinkLow", nil)
+}
+
+// ThinkLowHint says "想得少，回得快"
+// in the language the app shows.
+func ThinkLowHint() string { return In(i18n.Locale()).ThinkLowHint() }
+
+// ThinkLowHint says "想得少，回得快"
+// in the language of msgs.
+func (msgs Messages) ThinkLowHint() string {
+	return Catalog.Format(msgs.locale, "thinkLowHint", nil)
+}
+
+// ThinkMedium says "中"
+// in the language the app shows.
+func ThinkMedium() string { return In(i18n.Locale()).ThinkMedium() }
+
+// ThinkMedium says "中"
+// in the language of msgs.
+func (msgs Messages) ThinkMedium() string {
+	return Catalog.Format(msgs.locale, "thinkMedium", nil)
+}
+
+// ThinkMediumHint says "兼顾速度和质量"
+// in the language the app shows.
+func ThinkMediumHint() string { return In(i18n.Locale()).ThinkMediumHint() }
+
+// ThinkMediumHint says "兼顾速度和质量"
+// in the language of msgs.
+func (msgs Messages) ThinkMediumHint() string {
+	return Catalog.Format(msgs.locale, "thinkMediumHint", nil)
+}
+
+// ThinkHigh says "高"
+// in the language the app shows.
+func ThinkHigh() string { return In(i18n.Locale()).ThinkHigh() }
+
+// ThinkHigh says "高"
+// in the language of msgs.
+func (msgs Messages) ThinkHigh() string {
+	return Catalog.Format(msgs.locale, "thinkHigh", nil)
+}
+
+// ThinkHighHint says "想得更久，适合难题"
+// in the language the app shows.
+func ThinkHighHint() string { return In(i18n.Locale()).ThinkHighHint() }
+
+// ThinkHighHint says "想得更久，适合难题"
+// in the language of msgs.
+func (msgs Messages) ThinkHighHint() string {
+	return Catalog.Format(msgs.locale, "thinkHighHint", nil)
 }
 
 // AttachmentRemoveFile says "移除文件"
@@ -1191,11 +1271,11 @@ func (msgs Messages) ModelThinkStyle() string {
 	return Catalog.Format(msgs.locale, "modelThinkStyle", nil)
 }
 
-// ModelThinkStyleHint says "打开「深度思考」时怎样告诉模型要思考"
+// ModelThinkStyleHint says "怎样告诉模型要不要思考、想多深"
 // in the language the app shows.
 func ModelThinkStyleHint() string { return In(i18n.Locale()).ModelThinkStyleHint() }
 
-// ModelThinkStyleHint says "打开「深度思考」时怎样告诉模型要思考"
+// ModelThinkStyleHint says "怎样告诉模型要不要思考、想多深"
 // in the language of msgs.
 func (msgs Messages) ModelThinkStyleHint() string {
 	return Catalog.Format(msgs.locale, "modelThinkStyleHint", nil)

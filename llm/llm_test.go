@@ -413,11 +413,21 @@ func TestAnthropicStream(t *testing.T) {
 	if th, _ := json.Marshal(body["thinking"]); string(th) != `{"display":"summarized","type":"adaptive"}` {
 		t.Errorf("thinking %s", th)
 	}
+	if oc, _ := json.Marshal(body["output_config"]); string(oc) != `{"effort":"medium"}` {
+		t.Errorf("output_config %s", oc)
+	}
+	collect(t, cfg, Request{Messages: []Message{{Role: "user", Content: "hi"}}, Thinking: true, Effort: EffortHigh})
+	if oc, _ := json.Marshal(body["output_config"]); string(oc) != `{"effort":"high"}` {
+		t.Errorf("output_config at high effort %s", oc)
+	}
 
 	// Off: disabled on a model that thinks adaptively.
-	collect(t, cfg, Request{Messages: []Message{{Role: "user", Content: "hi"}}})
+	collect(t, cfg, Request{Messages: []Message{{Role: "user", Content: "hi"}}, Effort: EffortHigh})
 	if th, _ := json.Marshal(body["thinking"]); string(th) != `{"type":"disabled"}` {
 		t.Errorf("thinking off %s", th)
+	}
+	if oc, ok := body["output_config"]; ok {
+		t.Errorf("output_config %v with thinking off", oc)
 	}
 
 	cfg.Model = "claude-sonnet-5-5"
@@ -445,5 +455,67 @@ func TestAnthropicStream(t *testing.T) {
 	collect(t, cfg, Request{Messages: []Message{{Role: "user", Content: "hi"}}, Thinking: true})
 	if th, _ := json.Marshal(body["thinking"]); string(th) != `{"budget_tokens":4096,"type":"enabled"}` {
 		t.Errorf("budget thinking %s", th)
+	}
+	if oc, ok := body["output_config"]; ok {
+		t.Errorf("output_config %v sent with a budget", oc)
+	}
+	for effort, want := range map[Effort]string{EffortLow: "2048", EffortHigh: "6144"} {
+		collect(t, cfg, Request{Messages: []Message{{Role: "user", Content: "hi"}}, Thinking: true, Effort: effort})
+		if th, _ := json.Marshal(body["thinking"]); string(th) != `{"budget_tokens":`+want+`,"type":"enabled"}` {
+			t.Errorf("budget thinking at %s effort %s", effort, th)
+		}
+	}
+	cfg.Model, cfg.MaxTokens = "claude-sonnet-4-5", 64000
+	collect(t, cfg, Request{Messages: []Message{{Role: "user", Content: "hi"}}, Thinking: true, Effort: EffortHigh})
+	if th, _ := json.Marshal(body["thinking"]); string(th) != `{"budget_tokens":32000,"type":"enabled"}` {
+		t.Errorf("budget thinking at high effort %s", th)
+	}
+}
+
+func TestOpenAIEffort(t *testing.T) {
+	var body map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body = nil
+		json.NewDecoder(r.Body).Decode(&body)
+		fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"content\":\"Hi\"}}]}\n\ndata: [DONE]\n\n")
+	}))
+	defer srv.Close()
+	off := Effort("off")
+	cases := []struct {
+		style  ThinkStyle
+		effort Effort
+		want   string
+	}{
+		{ThinkEffort, off, `{}`},
+		{ThinkEffort, EffortLow, `{"reasoning_effort":"low"}`},
+		{ThinkEffort, "", `{"reasoning_effort":"medium"}`},
+		{ThinkEffort, EffortHigh, `{"reasoning_effort":"high"}`},
+		{ThinkEnable, off, `{"enable_thinking":false}`},
+		{ThinkEnable, EffortLow, `{"enable_thinking":true,"thinking_budget":2048}`},
+		{ThinkEnable, EffortMedium, `{"enable_thinking":true,"thinking_budget":16384}`},
+		{ThinkEnable, EffortHigh, `{"enable_thinking":true,"thinking_budget":32768}`},
+		{ThinkType, off, `{"thinking":{"type":"disabled"}}`},
+		{ThinkType, EffortLow, `{"reasoning_effort":"low","thinking":{"type":"enabled"}}`},
+		{ThinkType, EffortMedium, `{"thinking":{"type":"enabled"}}`},
+		{ThinkType, EffortHigh, `{"reasoning_effort":"max","thinking":{"type":"enabled"}}`},
+		{ThinkOpenRouter, off, `{}`},
+		{ThinkOpenRouter, EffortLow, `{"reasoning":{"effort":"low"}}`},
+		{ThinkOpenRouter, EffortHigh, `{"reasoning":{"effort":"high"}}`},
+		{ThinkNone, EffortHigh, `{}`},
+	}
+	for _, c := range cases {
+		req := Request{Messages: []Message{{Role: "user", Content: "hi"}}, Thinking: c.effort != off, Effort: c.effort}
+		if _, _, _, err := collect(t, Config{BaseURL: srv.URL, Model: "m", ThinkStyle: c.style}, req); err != nil {
+			t.Fatal(err)
+		}
+		got := map[string]any{}
+		for _, k := range []string{"reasoning_effort", "enable_thinking", "thinking_budget", "thinking", "reasoning"} {
+			if v, ok := body[k]; ok {
+				got[k] = v
+			}
+		}
+		if b, _ := json.Marshal(got); string(b) != c.want {
+			t.Errorf("%s at %q: %s, want %s", c.style, c.effort, b, c.want)
+		}
 	}
 }

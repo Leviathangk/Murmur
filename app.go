@@ -240,7 +240,7 @@ func (a *app) reply(c *Chat, m *Model) {
 	ctx, cancel := context.WithCancel(context.Background())
 	c.cancel = cancel
 	cfg := m.config(a.settings.Proxy)
-	req := llm.Request{System: a.settings.SystemPrompt, Thinking: a.settings.Thinking}
+	req := llm.Request{System: a.settings.SystemPrompt, Thinking: a.settings.Thinking, Effort: a.settings.Effort}
 	a.spawn(func() {
 		req.Messages = history(turns)
 		err := a.stream(ctx, cfg, req, func(e llm.Event) {
