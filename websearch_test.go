@@ -110,11 +110,12 @@ func TestWebSearch(t *testing.T) {
 	if reply.Content != "Go 1.27 已发布 [1]，最新是 1.27.1 [3]。" || reply.searching != "" {
 		t.Errorf("content %q, searching %q", reply.Content, reply.searching)
 	}
-	if !tt.HasText("已搜索 2 次 · 3 个网页") || tt.HasText("Release History") {
+	if !tt.HasText("已搜索「Go 1.27」· 2 个网页") || !tt.HasText("已搜索「Go release」· 2 个网页") || tt.HasText("Release History") {
 		t.Fatalf("texts %q", tt.Texts())
 	}
-	click(t, tt, "已搜索 2 次 · 3 个网页")
-	for _, s := range []string{"搜索「Go 1.27」", "搜索「Go release」", "[3]", "Release History", "go.dev · 2026-08-12", "go.dev · 2026-09-03", "go.dev"} {
+	click(t, tt, "已搜索「Go 1.27」· 2 个网页")
+	click(t, tt, "已搜索「Go release」· 2 个网页")
+	for _, s := range []string{"[2]", "Go 1.27 Release Notes", "[3]", "Release History", "go.dev · 2026-08-12", "go.dev · 2026-09-03", "go.dev"} {
 		if !tt.HasText(s) {
 			t.Errorf("no %q in %q", s, tt.Texts())
 		}
@@ -127,7 +128,7 @@ func TestWebSearch(t *testing.T) {
 	if !b.settings.WebSearch || b.settings.TavilyKey != "tvly-test" {
 		t.Errorf("loaded settings %+v", b.settings)
 	}
-	if m := b.chats[0].Messages[1]; len(m.Searches) != 2 || len(m.Sources) != 3 || m.Sources[0].Published != "2026-08-12T00:00:00Z" {
+	if m := b.chats[0].Messages[1]; len(m.Searches) != 2 || len(m.Sources) != 3 || m.Sources[0].Published != "2026-08-12T00:00:00Z" || fmt.Sprint(m.Searches[1].Sources) != "[1 3]" || len(m.Steps) != 4 {
 		t.Errorf("loaded reply %+v", m)
 	}
 
@@ -188,8 +189,8 @@ func TestSearching(t *testing.T) {
 	if len(reply.Searches) != 1 || reply.Searches[0].Error == "" || len(reply.Sources) != 0 || reply.Error != "" {
 		t.Fatalf("reply %+v", reply)
 	}
-	click(t, tt, "联网搜索失败")
-	if !tt.HasText("搜索失败：Tavily API Key 无效，请在设置里检查") || tt.HasText("没有结果") {
+	click(t, tt, "搜索「Go 1.27」失败")
+	if !tt.HasText("Tavily API Key 无效，请在设置里检查") || tt.HasText("没有结果") {
 		t.Errorf("texts %q", tt.Texts())
 	}
 	time.Sleep(400 * time.Millisecond)
@@ -197,69 +198,116 @@ func TestSearching(t *testing.T) {
 	snapshot(t, tt, "search-failed")
 }
 
-func TestActivityBetweenRounds(t *testing.T) {
+func TestSearchSteps(t *testing.T) {
 	a, _, _ := searchingApp(t)
 	a.settings.TavilyKey, a.settings.WebSearch = "tvly-test", true
 	tt := ui.NewTester(a.view, 1080, 720)
-	activity := []string{"正在搜索：Go 1.27", "正在等待回复…", "正在思考…"}
-	shows := func(want string) {
+	below := func(texts ...string) {
 		t.Helper()
 		tt.Frame()
-		for _, s := range activity {
-			if tt.HasText(s) != (s == want) {
-				t.Errorf("want %q, texts %q", want, tt.Texts())
+		y := float32(-1)
+		for _, s := range texts {
+			r, ok := tt.Find(s)
+			if !ok {
+				t.Errorf("no %q in %q", s, tt.Texts())
 				return
 			}
-		}
-		if want == "" {
-			return
-		}
-		text, _ := tt.Find("我先查一下。")
-		row, _ := tt.Find(want)
-		if row.Y <= text.Y {
-			t.Errorf("%q at y %.1f, above the text at y %.1f", want, row.Y, text.Y)
+			if r.Y <= y {
+				t.Errorf("%q at y %.1f, not below the one before at y %.1f", s, r.Y, y)
+			}
+			y = r.Y
 		}
 	}
-	thinking := func() bool {
+	thinking := func() int {
+		n := 0
 		for _, s := range tt.Texts() {
 			if strings.HasPrefix(s, "思考中…") {
-				return true
+				n++
 			}
 		}
-		return false
+		return n
 	}
 	a.webSearch = func(ctx context.Context, key, proxy, query string) ([]websearch.Result, error) {
-		shows("正在搜索：Go 1.27")
-		snapshot(t, tt, "activity-searching")
-		if thinking() {
-			t.Errorf("still thinking while searching: %q", tt.Texts())
+		if query == "Go 1.27" {
+			below("我先查一下。", "正在搜索：Go 1.27")
+			if tt.HasText("正在等待回复…") || thinking() != 0 {
+				t.Errorf("thinking or waiting while searching: %q", tt.Texts())
+			}
+			snapshot(t, tt, "steps-searching")
 		}
 		return goResults[query], nil
 	}
 	a.stream = func(ctx context.Context, cfg llm.Config, req llm.Request, emit func(llm.Event)) error {
 		emit(llm.Event{Reasoning: "要查一下。"})
-		emit(llm.Event{Text: "我先查一下。"})
-		shows("")
-		if _, err := run(t, req, "Go 1.27"); err != nil {
-			return err
-		}
-		shows("正在等待回复…")
-		snapshot(t, tt, "activity-waiting")
-		emit(llm.Event{Reasoning: "\n\n结果说是 1.27。"})
-		shows("正在思考…")
-		snapshot(t, tt, "activity-thinking")
-		if !thinking() {
+		below("要查一下。")
+		if thinking() != 1 {
 			t.Errorf("no live thinking label in %q", tt.Texts())
 		}
-		emit(llm.Event{Text: "\n\nGo 1.27 [1]。"})
-		shows("")
+		emit(llm.Event{Text: "我先查一下。"})
+		for _, q := range []string{"Go 1.27", "Go release"} {
+			if _, err := run(t, req, q); err != nil {
+				return err
+			}
+		}
+		below("我先查一下。", "已搜索「Go 1.27」· 2 个网页", "已搜索「Go release」· 2 个网页", "正在等待回复…")
+		snapshot(t, tt, "steps-waiting")
+		emit(llm.Event{Reasoning: "\n\n结果说是 1.27。"})
+		below("已搜索「Go release」· 2 个网页", "结果说是 1.27。")
+		if thinking() != 1 || tt.HasText("正在等待回复…") {
+			t.Errorf("thinking again: %q", tt.Texts())
+		}
+		snapshot(t, tt, "steps-thinking")
+		emit(llm.Event{Text: "\n\nGo 1.27 [1]，最新是 1.27.1 [3]。"})
 		return nil
 	}
 	a.send("Go 最新版本？")
-	shows("")
+	tt.Frame()
+	time.Sleep(400 * time.Millisecond)
+	below("我先查一下。", "已搜索「Go 1.27」· 2 个网页", "已搜索「Go release」· 2 个网页", "Go 1.27 [1]，最新是 1.27.1 [3]。")
 	reply := a.current.Messages[1]
-	if reply.ThinkMS < 2 || reply.writing || !reply.thinkStart.IsZero() {
-		t.Errorf("think %d ms, writing %v, thinking since %v", reply.ThinkMS, reply.writing, reply.thinkStart)
+	var kinds []stepKind
+	var ms int64
+	for _, s := range reply.Steps {
+		kinds = append(kinds, s.Kind)
+		ms += s.ThinkMS
+	}
+	if fmt.Sprint(kinds) != "[think text search search think text]" || reply.Steps[0].ThinkMS == 0 || reply.Steps[4].ThinkMS == 0 || ms != reply.ThinkMS {
+		t.Errorf("steps %+v, think %d ms", reply.Steps, reply.ThinkMS)
+	}
+	if reply.writing || !reply.thinkStart.IsZero() {
+		t.Errorf("writing %v, thinking since %v", reply.writing, reply.thinkStart)
+	}
+	labels := 0
+	for _, s := range tt.Texts() {
+		if strings.HasPrefix(s, "已思考") {
+			labels++
+		}
+	}
+	if labels != 2 || thinking() != 0 || tt.HasText("要查一下。") || tt.HasText("结果说是 1.27。") || tt.HasText("已搜索 2 次 · 3 个网页") {
+		t.Errorf("texts %q", tt.Texts())
+	}
+	snapshot(t, tt, "steps-done")
+
+	f := a.current
+	a.fork(f, 1)
+	if m := a.current.Messages[1]; len(m.Steps) != 6 || m.Steps[0] == reply.Steps[0] || *m.Steps[5] != *reply.Steps[5] {
+		t.Errorf("forked steps %+v", m.Steps)
+	}
+}
+
+func TestSearchesWithoutSteps(t *testing.T) {
+	a, _ := testApp(t)
+	a.current = &Chat{ID: newID(), Title: "Go", Messages: []*Message{
+		{Role: "user", Content: "Go 最新版本？", key: a.newKey()},
+		{Role: "assistant", Content: "Go 1.27 [1]。", Reasoning: "要查一下。\n\n结果说是 1.27。", ThinkMS: 3000, key: a.newKey(),
+			Searches: []*Search{{Query: "Go 1.27"}}, Sources: []*Source{{Title: "Go 1.27 is released", URL: "https://go.dev/blog/go1.27"}}},
+	}}
+	a.chats = []*Chat{a.current}
+	tt := ui.NewTester(a.view, 1080, 720)
+	for _, s := range []string{"已思考 3 秒", "已搜索 1 次 · 1 个网页", "Go 1.27 [1]。"} {
+		if !tt.HasText(s) {
+			t.Errorf("no %q in %q", s, tt.Texts())
+		}
 	}
 }
 
@@ -282,8 +330,8 @@ func TestSearchLimit(t *testing.T) {
 		t.Errorf("%d searches recorded", n)
 	}
 	tt := ui.NewTester(a.view, 1080, 720)
-	click(t, tt, "已搜索 5 次 · 0 个网页")
-	if !tt.HasText("没有结果") || !tt.HasText("搜索「q4」") {
+	click(t, tt, "已搜索「q4」· 0 个网页")
+	if !tt.HasText("没有结果") || !tt.HasText("已搜索「q0」· 0 个网页") {
 		t.Errorf("texts %q", tt.Texts())
 	}
 

@@ -206,9 +206,9 @@ func TestInterfaceTranslated(t *testing.T) {
 			if want := locales.UsageTokens(locales.UsageInput(1234) + " · " + locales.UsageOutput(56)); !tt.HasText(want) {
 				t.Errorf("no %q in %q", want, tt.Texts())
 			}
-			click(t, tt, locales.SearchSummary(1, 1))
+			click(t, tt, locales.SearchStep("Murmur", 1))
 			check("sources", tt.Texts())
-			if !tt.HasText(locales.SearchQuery("Murmur")) {
+			if !tt.HasText("[1]") {
 				t.Errorf("no search in %q", tt.Texts())
 			}
 			click(t, tt, locales.More())

@@ -23,8 +23,11 @@ const (
 )
 
 type Search struct {
-	Query string `json:"query"`
-	Error string `json:"error,omitempty"`
+	Query   string `json:"query"`
+	Error   string `json:"error,omitempty"`
+	Sources []int  `json:"sources,omitempty"`
+
+	open bool
 }
 
 type Source struct {
@@ -113,10 +116,16 @@ func (s *searcher) run(ctx context.Context, input json.RawMessage) (string, erro
 	s.a.update(func() {
 		s.reply.pause(time.Now())
 		s.reply.searching = query
+		s.reply.step(stepSearch)
 	})
 	results, err := s.a.webSearch(ctx, s.key, s.proxy, query)
 	if ctx.Err() != nil {
-		s.a.update(func() { s.reply.searching = "" })
+		s.a.update(func() {
+			s.reply.searching = ""
+			if n := len(s.reply.Steps); n > 0 && s.reply.Steps[n-1].Kind == stepSearch {
+				s.reply.Steps = s.reply.Steps[:n-1]
+			}
+		})
 		return "", ctx.Err()
 	}
 	if s.numbers == nil {
@@ -137,6 +146,7 @@ func (s *searcher) run(ctx context.Context, input json.RawMessage) (string, erro
 		}
 		numbers[i] = n
 	}
+	search.Sources = numbers
 	s.a.update(func() {
 		s.reply.searching = ""
 		s.reply.Searches = append(s.reply.Searches, search)
@@ -239,16 +249,7 @@ func (a *app) searches(c *ui.Context, m *Message) {
 	}
 	allFailed := failed == len(m.Searches)
 	p := ui.CollapsibleBase(c.Key("sources"), &m.sourcesOpen)
-	p.Trigger.Gap(6).Padding(5, 10).Margin(0, 0, 0, -10).Radius(8).AlignItems(ui.Center).AlignSelf(ui.Start).TextColor(t.TextMuted)
-	switch {
-	case allFailed:
-		p.Trigger.TextColor(t.Danger)
-		if p.Trigger.Hovered() {
-			p.Trigger.Background(t.Danger.Alpha(0.1))
-		}
-	case p.Trigger.Hovered():
-		p.Trigger.Background(t.SurfaceHover).TextColor(t.Text)
-	}
+	styleTrigger(c, p, allFailed)
 	p.Trigger.Children(func() {
 		if allFailed {
 			ui.Icon(c, alertIcon).Size(14, 14)
@@ -273,18 +274,69 @@ func (a *app) searches(c *ui.Context, m *Message) {
 				ui.Text(c, locales.SearchNoResults()).FontSize(12).TextColor(t.TextMuted)
 			}
 			for i, src := range m.Sources {
-				ui.Row(c.Key(src.URL)).Gap(6).AlignItems(ui.Start).Children(func() {
-					ui.Text(c, fmt.Sprintf("[%d]", i+1)).FontSize(12).TextColor(t.TextMuted).MinWidth(20).Shrink(0)
-					ui.Column(c).Gap(1).Shrink(1).MinWidth(0).Children(func() {
-						ui.Link(c, src.Title, src.URL).FontSize(13).Tooltip(src.URL)
-						meta := siteOf(src.URL)
-						if d := shortDate(src.Published); d != "" {
-							meta += " · " + d
-						}
-						ui.Text(c, meta).FontSize(11).TextColor(t.TextMuted).SingleLine()
-					})
-				})
+				sourceRow(c.Key(src.URL), i+1, src)
 			}
+		})
+	})
+}
+
+func (a *app) searchStep(c *ui.Context, m *Message, s *Search) {
+	t := c.Theme()
+	failed := s.Error != ""
+	p := ui.CollapsibleBase(c.Key("search"), &s.open)
+	styleTrigger(c, p, failed)
+	p.Trigger.Children(func() {
+		if failed {
+			ui.Icon(c, alertIcon).Size(14, 14)
+			ui.Text(c, locales.SearchStepFailed(s.Query)).FontSize(13)
+		} else {
+			ui.Icon(c, globeIcon).Size(14, 14)
+			ui.Text(c, locales.SearchStep(s.Query, len(s.Sources))).FontSize(13)
+		}
+		ui.Icon(c, chevronIcon).Size(14, 14).Rotate(90 * p.Progress())
+	})
+	p.Panel(func() {
+		ui.Column(c).Margin(6, 0, 2, 4).Padding(2, 0, 2, 14).Gap(6).BorderWidth(0, 0, 0, 2).BorderColor(t.Border).Children(func() {
+			switch {
+			case failed:
+				ui.Text(c, s.Error).FontSize(12).TextColor(t.Danger).Selectable()
+			case len(s.Sources) == 0:
+				ui.Text(c, locales.SearchNoResults()).FontSize(12).TextColor(t.TextMuted)
+			}
+			for i, n := range s.Sources {
+				if n >= 1 && n <= len(m.Sources) {
+					sourceRow(c.Key(i), n, m.Sources[n-1])
+				}
+			}
+		})
+	})
+}
+
+func styleTrigger(c *ui.Context, p ui.CollapsibleParts, danger bool) {
+	t := c.Theme()
+	p.Trigger.Gap(6).Padding(5, 10).Margin(0, 0, 0, -10).Radius(8).AlignItems(ui.Center).AlignSelf(ui.Start).TextColor(t.TextMuted)
+	switch {
+	case danger:
+		p.Trigger.TextColor(t.Danger)
+		if p.Trigger.Hovered() {
+			p.Trigger.Background(t.Danger.Alpha(0.1))
+		}
+	case p.Trigger.Hovered():
+		p.Trigger.Background(t.SurfaceHover).TextColor(t.Text)
+	}
+}
+
+func sourceRow(c *ui.Context, n int, src *Source) {
+	t := c.Theme()
+	ui.Row(c).Gap(6).AlignItems(ui.Start).Children(func() {
+		ui.Text(c, fmt.Sprintf("[%d]", n)).FontSize(12).TextColor(t.TextMuted).MinWidth(20).Shrink(0)
+		ui.Column(c).Gap(1).Shrink(1).MinWidth(0).Children(func() {
+			ui.Link(c, src.Title, src.URL).FontSize(13).Tooltip(src.URL)
+			meta := siteOf(src.URL)
+			if d := shortDate(src.Published); d != "" {
+				meta += " · " + d
+			}
+			ui.Text(c, meta).FontSize(11).TextColor(t.TextMuted).SingleLine()
 		})
 	})
 }

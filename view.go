@@ -413,17 +413,21 @@ func (a *app) message(c *ui.Context, ch *Chat, i int) {
 			return
 		}
 		ui.Column(c).Gap(10).Children(func() {
-			if m.Reasoning != "" {
-				a.thinking(c, m)
-			}
-			if len(m.Searches) > 0 {
-				a.searches(c, m)
-			}
-			switch {
-			case m.Content != "" && m.streaming:
-				markdown.Stream(c, m.Content, &a.md)
-			case m.Content != "":
-				markdown.View(c, m.Content, &a.md)
+			if len(m.Steps) > 0 {
+				a.steps(c, m)
+			} else {
+				if m.Reasoning != "" {
+					a.thinking(c, m)
+				}
+				if len(m.Searches) > 0 {
+					a.searches(c, m)
+				}
+				switch {
+				case m.Content != "" && m.streaming:
+					markdown.Stream(c, m.Content, &a.md)
+				case m.Content != "":
+					markdown.View(c, m.Content, &a.md)
+				}
 			}
 			if m.streaming {
 				a.activity(c, m)
@@ -443,7 +447,6 @@ func (a *app) message(c *ui.Context, ch *Chat, i int) {
 
 // thinking shows the model's reasoning, which hides once it answers.
 func (a *app) thinking(c *ui.Context, m *Message) {
-	t := c.Theme()
 	label := locales.ThinkingTitle()
 	switch {
 	case m.streaming && !m.thinkStart.IsZero():
@@ -452,11 +455,53 @@ func (a *app) thinking(c *ui.Context, m *Message) {
 	case m.ThinkMS > 0:
 		label = locales.ThinkingDone(seconds(m.ThinkMS))
 	}
-	p := ui.CollapsibleBase(c.Key("think"), &m.thinkOpen)
-	p.Trigger.Gap(6).Padding(5, 10).Margin(0, 0, 0, -10).Radius(8).AlignItems(ui.Center).AlignSelf(ui.Start).TextColor(t.TextMuted)
-	if p.Trigger.Hovered() {
-		p.Trigger.Background(t.SurfaceHover).TextColor(t.Text)
+	thought(c, &m.thinkOpen, label, m.Reasoning)
+}
+
+func (a *app) steps(c *ui.Context, m *Message) {
+	reasoning, content, searches := 0, 0, 0
+	for i, s := range m.Steps {
+		last := i == len(m.Steps)-1
+		switch s.Kind {
+		case stepThink:
+			from := reasoning
+			reasoning = min(reasoning+s.Size, len(m.Reasoning))
+			label := locales.ThinkingTitle()
+			switch {
+			case m.streaming && last && !m.thinkStart.IsZero():
+				label = locales.ThinkingNow(seconds(s.ThinkMS + time.Since(m.thinkStart).Milliseconds()))
+				c.After(time.Second)
+			case s.ThinkMS > 0:
+				label = locales.ThinkingDone(seconds(s.ThinkMS))
+			}
+			ui.Column(c.Key(i)).Children(func() { thought(c, &s.open, label, m.Reasoning[from:reasoning]) })
+		case stepText:
+			from := content
+			content = min(content+s.Size, len(m.Content))
+			ui.Column(c.Key(i)).Children(func() {
+				if m.streaming && last {
+					markdown.Stream(c, m.Content[from:content], &a.md)
+				} else {
+					markdown.View(c, m.Content[from:content], &a.md)
+				}
+			})
+		case stepSearch:
+			switch {
+			case searches < len(m.Searches):
+				search := m.Searches[searches]
+				ui.Column(c.Key(i)).Children(func() { a.searchStep(c, m, search) })
+			case m.searching != "" && last:
+				spinnerRow(c.Key(i), locales.SearchingNow(m.searching)).Padding(5, 0)
+			}
+			searches++
+		}
 	}
+}
+
+func thought(c *ui.Context, open *bool, label, text string) {
+	t := c.Theme()
+	p := ui.CollapsibleBase(c.Key("think"), open)
+	styleTrigger(c, p, false)
 	p.Trigger.Children(func() {
 		ui.Icon(c, bulbIcon).Size(14, 14)
 		ui.Text(c, label).FontSize(13)
@@ -464,30 +509,25 @@ func (a *app) thinking(c *ui.Context, m *Message) {
 	})
 	p.Panel(func() {
 		ui.Column(c).Margin(6, 0, 2, 4).Padding(2, 0, 2, 14).BorderWidth(0, 0, 0, 2).BorderColor(t.Border).Children(func() {
-			ui.Text(c, strings.TrimSpace(m.Reasoning)).FontSize(13).LineHeight(1.6).TextColor(t.TextMuted).Selectable()
+			ui.Text(c, strings.TrimSpace(text)).FontSize(13).LineHeight(1.6).TextColor(t.TextMuted).Selectable()
 		})
 	})
 }
 
 func (a *app) activity(c *ui.Context, m *Message) {
-	var label string
-	switch {
-	case m.searching != "":
-		label = locales.SearchingNow(m.searching)
-	case m.writing:
+	if m.writing || m.searching != "" || !m.thinkStart.IsZero() {
 		return
-	case !m.thinkStart.IsZero():
-		if m.Content == "" {
-			return
-		}
-		label = locales.ReplyThinking()
-	default:
-		label = locales.ReplyWaiting()
 	}
-	ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+	spinnerRow(c, locales.ReplyWaiting())
+}
+
+func spinnerRow(c *ui.Context, label string) ui.Element {
+	row := ui.Row(c).Gap(8).AlignItems(ui.Center)
+	row.Children(func() {
 		ui.Spinner(c).Size(14, 14)
 		ui.Text(c, label).FontSize(13).TextColor(c.Theme().TextMuted).SingleLine().Shrink(1)
 	})
+	return row
 }
 
 // seconds says how long ms is, as the thinking label does.

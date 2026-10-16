@@ -262,14 +262,15 @@ func TestStreamingInPlace(t *testing.T) {
 	a.send("分页一个")
 	tt.Frame()
 	reply := a.current.Messages[1]
-	reply.streaming, reply.Content = true, "可以。"
+	reply.streaming, reply.Content, reply.Steps = true, "", nil
+	reply.write(time.Now(), "可以。")
 	tt.Frame()
 	start, ok := tt.Find("可以。")
 	if !ok {
 		t.Fatalf("no reply in %q", tt.Texts())
 	}
 	grow := func(k int) {
-		reply.Content += fmt.Sprintf("\n\n第 %d 段", k)
+		reply.write(time.Now(), fmt.Sprintf("\n\n第 %d 段", k))
 		tt.Frame()
 		time.Sleep(30 * time.Millisecond) // time for the motion, if any
 		tt.Frame()

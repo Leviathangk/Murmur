@@ -377,16 +377,6 @@ func (msgs Messages) ReplyWaiting() string {
 	return Catalog.Format(msgs.locale, "replyWaiting", nil)
 }
 
-// ReplyThinking says "正在思考…"
-// in the language the app shows.
-func ReplyThinking() string { return In(i18n.Locale()).ReplyThinking() }
-
-// ReplyThinking says "正在思考…"
-// in the language of msgs.
-func (msgs Messages) ReplyThinking() string {
-	return Catalog.Format(msgs.locale, "replyThinking", nil)
-}
-
 // ReplyEmpty says "模型没有返回任何内容"
 // in the language the app shows.
 func ReplyEmpty() string { return In(i18n.Locale()).ReplyEmpty() }
@@ -487,6 +477,26 @@ func SearchQuery(query string) string { return In(i18n.Locale()).SearchQuery(que
 // in the language of msgs.
 func (msgs Messages) SearchQuery(query string) string {
 	return Catalog.Format(msgs.locale, "searchQuery", map[string]any{"query": query})
+}
+
+// SearchStep says "已搜索「{query}」· {pages} 个网页"
+// in the language the app shows.
+func SearchStep(query string, pages int) string { return In(i18n.Locale()).SearchStep(query, pages) }
+
+// SearchStep says "已搜索「{query}」· {pages} 个网页"
+// in the language of msgs.
+func (msgs Messages) SearchStep(query string, pages int) string {
+	return Catalog.Format(msgs.locale, "searchStep", map[string]any{"query": query, "pages": pages})
+}
+
+// SearchStepFailed says "搜索「{query}」失败"
+// in the language the app shows.
+func SearchStepFailed(query string) string { return In(i18n.Locale()).SearchStepFailed(query) }
+
+// SearchStepFailed says "搜索「{query}」失败"
+// in the language of msgs.
+func (msgs Messages) SearchStepFailed(query string) string {
+	return Catalog.Format(msgs.locale, "searchStepFailed", map[string]any{"query": query})
 }
 
 // SearchNoResults says "没有结果"

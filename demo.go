@@ -55,7 +55,9 @@ func init() {
 			time.Sleep(1500 * time.Millisecond) // the last words fade in
 			capture("demo-answer.png")
 			a.win.Update(func() {
-				a.current.Messages[1].thinkOpen = true
+				for _, s := range a.current.Messages[1].Steps {
+					s.open = s.Kind == stepThink
+				}
 				a.collapsed = true
 			})
 			time.Sleep(800 * time.Millisecond)

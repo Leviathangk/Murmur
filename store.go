@@ -101,6 +101,7 @@ type Message struct {
 
 	Searches []*Search `json:"searches,omitempty"`
 	Sources  []*Source `json:"sources,omitempty"`
+	Steps    []*Step   `json:"steps,omitempty"`
 
 	key        int       // identifies the message in the list
 	streaming  bool      // the reply is still coming
@@ -114,11 +115,43 @@ type Message struct {
 	writing     bool
 }
 
+type stepKind string
+
+const (
+	stepThink  stepKind = "think"
+	stepText   stepKind = "text"
+	stepSearch stepKind = "search"
+)
+
+type Step struct {
+	Kind    stepKind `json:"kind"`
+	Size    int      `json:"size,omitempty"`
+	ThinkMS int64    `json:"think_ms,omitempty"`
+
+	open bool
+}
+
+func (m *Message) step(kind stepKind) *Step {
+	if n := len(m.Steps); n > 0 {
+		last := m.Steps[n-1]
+		if last.Kind == kind && kind != stepSearch {
+			return last
+		}
+		if last.Kind == stepThink {
+			last.open = false
+		}
+	}
+	s := &Step{Kind: kind, open: kind == stepThink}
+	m.Steps = append(m.Steps, s)
+	return s
+}
+
 func (m *Message) think(now time.Time, s string) {
 	if m.thinkStart.IsZero() {
 		m.thinkStart = now
 	}
 	m.Reasoning += s
+	m.step(stepThink).Size += len(s)
 	m.writing = false
 }
 
@@ -128,12 +161,17 @@ func (m *Message) write(now time.Time, s string) {
 		m.thinkOpen = false
 	}
 	m.Content += s
+	m.step(stepText).Size += len(s)
 	m.writing = true
 }
 
 func (m *Message) pause(now time.Time) {
 	if !m.thinkStart.IsZero() {
-		m.ThinkMS += max(now.Sub(m.thinkStart).Milliseconds(), 1)
+		ms := max(now.Sub(m.thinkStart).Milliseconds(), 1)
+		m.ThinkMS += ms
+		if n := len(m.Steps); n > 0 && m.Steps[n-1].Kind == stepThink {
+			m.Steps[n-1].ThinkMS += ms
+		}
 		m.thinkStart = time.Time{}
 	}
 	m.writing = false

@@ -41,7 +41,6 @@
   "welcomeTitle": "有什么可以帮你？",
   "welcomeAddModel": "先添加一个模型：OpenAI、Claude、DeepSeek、通义千问、Ollama，或任何 OpenAI 兼容的接口。",
   "replyWaiting": "正在等待回复…",
-  "replyThinking": "正在思考…",
   "replyEmpty": "模型没有返回任何内容",
   "replyPreviewPage": "预览网页",
   "replyFork": "从这里开新对话",
@@ -84,6 +83,25 @@
   },
   "searchQuery": "搜索「{query}」",
   "@searchQuery": {
+    "placeholders": {
+      "query": {
+        "type": "String"
+      }
+    }
+  },
+  "searchStep": "已搜索「{query}」· {pages} 个网页",
+  "@searchStep": {
+    "placeholders": {
+      "query": {
+        "type": "String"
+      },
+      "pages": {
+        "type": "int"
+      }
+    }
+  },
+  "searchStepFailed": "搜索「{query}」失败",
+  "@searchStepFailed": {
     "placeholders": {
       "query": {
         "type": "String"

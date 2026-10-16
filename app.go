@@ -382,6 +382,17 @@ func (a *app) fork(c *Chat, i int) {
 		m := *m
 		m.Images, m.Documents = slices.Clone(m.Images), slices.Clone(m.Documents)
 		m.key, m.thinkOpen = a.newKey(), false
+		m.Steps, m.Searches = slices.Clone(m.Steps), slices.Clone(m.Searches)
+		for j, s := range m.Steps {
+			s := *s
+			s.open = false
+			m.Steps[j] = &s
+		}
+		for j, s := range m.Searches {
+			s := *s
+			s.open = false
+			m.Searches[j] = &s
+		}
 		f.Messages = append(f.Messages, &m)
 	}
 	a.chats = append([]*Chat{f}, a.chats...)
