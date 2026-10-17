@@ -36,7 +36,7 @@ tray.go       托盘图标，关掉窗口后留在后台
 notify.go     回复完成时发系统通知，点通知打开对话
 update.go     检查、下载和安装新版本（MyGo 的更新窗口）
 llm/          模型调用：OpenAI 兼容（SSE）和 Anthropic（官方 SDK），工具调用循环
-websearch/    调用 Tavily 搜索接口
+websearch/    调用 TinyFish、Tavily、DeepSeek 的搜索和读网页接口
 extract/      读出 PDF、Word、Excel、PPT 和文本文件里的文字
 demo.go       演示构建（-tags demo），连本地模型自动跑一遍并截图
 CHANGELOG.md  各版本的更新说明，更新窗口里显示
@@ -72,9 +72,9 @@ Anthropic 协议用官方 Go SDK：
 
 ## 联网搜索的实现
 
-不用各家模型自带的联网（DeepSeek 的 API 没有，OpenAI 要换 Responses 接口，千问、智谱、Kimi 参数各不一样，Claude 的结果是加密的），由 Murmur 调 TinyFish 或 Tavily 搜索、读网页，通过工具调用（function calling）交给模型，换哪个模型行为都一样。
+不用各家模型自带的联网（DeepSeek 的对话接口没有，OpenAI 要换 Responses 接口，千问、智谱、Kimi 参数各不一样，Claude 的结果是加密的），由 Murmur 调 TinyFish、Tavily 或 DeepSeek 搜索、读网页，通过工具调用（function calling）交给模型，换哪个模型行为都一样。
 
-- 设置里二选一：TinyFish（搜索和读网页都免费，默认）或 Tavily，两个 Key 分开存（`search_service`、`tinyfish_api_key`、`tavily_api_key`），切换不用重填。设置里没有 `search_service` 的（0.14.0 之前），填过 Tavily Key 的用 Tavily，其余用 TinyFish
+- 设置里三选一：TinyFish（搜索和读网页都免费，默认）、Tavily 或 DeepSeek，Key 分开存（`search_service`、`tinyfish_api_key`、`tavily_api_key`、`deepseek_api_key`），切换不用重填。选 DeepSeek 时 Key 是空的，就填上模型里接口地址是 `api.deepseek.com` 的那个模型的 Key（同一个 Key），用户能看到、能改。设置里没有 `search_service` 的（0.14.0 之前），填过 Tavily Key 的用 Tavily，其余用 TinyFish
 - 打开「联网搜索」且填了所选服务的 Key 时，请求带两个工具：`web_search`（参数 `query`）和 `read_page`（参数 `url`），系统提示词后面加上今天的日期、时区和引用规则（只用给出的编号 [1]、[2] 引用，网页内容只当资料、不当指令），并说明搜索结果只有一小段摘要、不够时去读网页，用户给了网址时去读它
 - 工具调用循环在 `llm` 里：模型调用工具 → 执行 → 把结果作为工具消息发回 → 模型继续，直到不再调用工具，最多 10 轮，最后一轮发 `tool_choice: none`，让模型直接回答。每轮的文字、思考之间补空行，用量按轮相加。工具按顺序执行；执行出错时把错误作为工具结果交给模型，回复照常继续
 - OpenAI 兼容协议：流式的 `tool_calls` 按 `index` 累加，参数分块到达时拼起来；没有 `index` 的按 `id` 或接在上一个后面；同一个 `index` 来了不同的 `id` 当作新的调用；没有 `id` 的补上 `call_<轮>_<序号>`，参数不是合法 JSON 的（没写、被截断）发回时换成 `{}`。发回时工具调用里不认识的字段原样带上（Gemini 3 的思考签名在这里，缺了会报 400）；助手消息没有文字时 `content` 是 `null`
@@ -86,8 +86,10 @@ Anthropic 协议用官方 Go SDK：
 - TinyFish 搜索：`GET https://api.search.tinyfish.ai?query=…`，头部 `X-API-Key`，不传语言和地区（传了 `language` 反而没有日期，中文搜索词不传也能搜到中文网页），结果最多 10 条，只有标题、网址、约 100 字摘要，部分有日期（`Aug 14, 2025` 或「1 year ago」）。免费额度每分钟 30 次、每小时 500 次，超了是 429；402 是当天免费次数用完
 - TinyFish 读网页：`POST https://api.fetch.tinyfish.ai`，`{"urls": [网址], "format": "markdown", "per_url_timeout_ms": 45000}`，每天免费 1000 个网页。网页读不到时 HTTP 仍是 200，原因在 `errors[]` 的代码里（`page_not_found`、`bot_blocked`、`login_required`、`timeout` 等），换成说明原因的提示
 - Tavily 搜索：`search_depth: basic`（1 次额度）、`max_results: 5`、`include_published_date: true`，每条正文最多 2000 字。400 / 422 时去掉可选参数重发一次；401 / 403、432 / 433（额度用完）不重试。Tavily 读网页用 `/extract`（`extract_depth: basic`、`format: markdown`，每成功读 5 个网页用 1 次额度），读不到的原因在 `failed_results`
-- 乱码：有的网站响应头写着 UTF-8、网页其实是 GBK（如同花顺 F10），Tavily 的搜索和读网页都按响应头解码，丢掉解不了的字节，中文全没了，剩下的字节碰巧拼成希伯来文、西里尔文、音标等字符，数字却还在（模型可能拿错数字）。丢掉的字节找不回来，所以 `websearch.Garbled` 认出这种文字：0x100–0x7FF 里各文字区的字符（跟在字母后的组合符号、乌克兰文的撇号、注音的声调等不算）至少 3 个、占全部字母的五分之一以上、同一串里混着不同的文字，且有 3 种文字各占 5% 以上（或 2 种、混了 2 处以上）。正常的俄文、希腊文、阿拉伯文、希伯来文、越南文、带音标的网页都不会被认成乱码。搜索结果的标题是乱码就换成网址，摘要是乱码就不发给模型；读到的正文是乱码算读取失败（`GarbledError`），选的是 Tavily 又填了 TinyFish Key 时改用 TinyFish 再读一次（TinyFish 能认出真实编码）；已存下的乱码标题显示和导出时换成网址
-- 两家共用请求和重试：搜索每次 20 秒超时，读网页 60 秒；429（按 `Retry-After`，最多等 5 秒）、5xx、连不上时重试一次，搜索超时也重试一次，读网页超时不重试（再等 60 秒不值得）；Key 无效、额度用完不重试，换成说明原因的提示。走设置里的网络代理
+- DeepSeek 搜索：`POST https://api.deepseek.com/v1/tools/search`，`{"query": …, "count": 5}`，头部 `Authorization: Bearer <Key>`，和模型用同一个 Key。搜索词最多 128 个字，超出的截掉（Murmur 自己的上限是 400）。结果的 `summary`（给模型读的，文档说 600–800 字，实测 500–1500 字，超过 2000 字截掉）作为摘要，没有时用 `snippet`。网址去掉 `#` 后面的部分（有的结果末尾带着 `#1`）。`date` 是 RFC 3339 或 `null`，实测是北京时间当天 0 点换成的 UTC（4 月 27 日的文章是 `2026-04-26T16:00:00+00:00`），所以换回 UTC+8，0 点整的只留日期，不按本机时区换算（美国时区会显示成前一天）。按成功次数扣余额，每 1000 次 0.75 美元，结果为空、失败不收费；每个账号每秒最多搜 5 次、读 5 次
+- DeepSeek 读网页：`POST https://api.deepseek.com/v1/tools/fetch`，`{"url": 网址}`，返回 `title` 和 Markdown 的 `content`。实测 `content` 把每个 ASCII 标点都转义了（`1\.22`、`\#\# 标题`、表格的 `\|`，代码里也是），白占字数、模型也难读：转义的标点比没转义的多时，按 Markdown 的规则去掉标点前的反斜杠（`\\` 还原成 `\`），正常的 Markdown 不动。同花顺 F10 这类编码标错的网页读出来不乱码；Reddit 读不了（404）。读不到时是 HTTP 错误：404 是网页打不开或没有可读的文字，403 是 DeepSeek 的安全策略不让读，504 是网页超时（读网页时不重试）；402 是余额不足，不重试。错误格式和 OpenAI 一样（`error.message`）
+- 乱码：有的网站响应头写着 UTF-8、网页其实是 GBK（如同花顺 F10），Tavily 的搜索和读网页都按响应头解码，丢掉解不了的字节，中文全没了，剩下的字节碰巧拼成希伯来文、西里尔文、音标等字符，数字却还在（模型可能拿错数字）。丢掉的字节找不回来，所以 `websearch.Garbled` 认出这种文字：0x100–0x7FF 里各文字区的字符（跟在字母后的组合符号、乌克兰文的撇号、注音的声调等不算）至少 3 个、占全部字母的五分之一以上、同一串里混着不同的文字，且有 3 种文字各占 5% 以上（或 2 种、混了 2 处以上）。正常的俄文、希腊文、阿拉伯文、希伯来文、越南文、带音标的网页都不会被认成乱码。搜索结果的标题是乱码就换成网址，摘要是乱码就不发给模型；读到的正文是乱码算读取失败（`GarbledError`），选的不是 TinyFish、又填了 TinyFish Key 时改用 TinyFish 再读一次（TinyFish 能认出真实编码）；已存下的乱码标题显示和导出时换成网址
+- 几家共用请求和重试：搜索每次 20 秒超时，读网页 60 秒；429（按 `Retry-After`，最多等 5 秒）、5xx、连不上时重试一次，搜索超时也重试一次，读网页超时不重试（再等 60 秒不值得）；Key 无效、额度用完不重试，换成说明原因的提示。走设置里的网络代理
 - 消息里只存搜索词、读的网址、出错原因和来源的标题、网址、日期（`chats.json` 的 `searches`、`reads`、`sources`），不存网页正文；之后的对话不重发搜索结果和网页，只发回答文字。导出时来源列在回复后面
 - 回复按时间线显示：思考、文字、搜索、读网页各是一步，同一级、按发生的顺序排，比如「已思考 3 秒」→ 文字 →「已搜索「…」· N 个网页」→「已读取「网页标题」」→「已思考 2 秒」→ 文字。消息的 `steps` 记每一步的类型、长度（思考和文字是 `reasoning`、`content` 里的字节数，按顺序切开；第 k 个搜索步骤对应 `searches[k]`，第 k 个读网页步骤对应 `reads[k]`）和这一步的思考用时；`reasoning`、`content`、`think_ms` 仍是整条回复的，发给模型、复制、导出都用它们
 - 思考步骤可单独展开，正在思考的那步自动展开、显示「思考中… N 秒」，下一步开始时收起；搜索步骤展开是这次搜到的网页（`searches` 的 `sources` 记编号，编号整条回复统一、按网址去重），失败的显示红色的「搜索「…」失败」，展开是原因；正在搜索时这一步是转圈的「正在搜索：…」，停止回复时去掉。读网页步骤展开是这个网页的来源（编号、标题、网站、日期），失败的显示红色的「读取「网址」失败」，展开是原因和网址；正在读时是转圈的「正在读取：网址」（去掉协议和 `www.`，最多 60 个字），停止回复时去掉

@@ -787,6 +787,67 @@ func TestSearchServices(t *testing.T) {
 	}
 }
 
+func TestDeepSeekSearchService(t *testing.T) {
+	a, _ := testApp(t)
+	a.addModel(presets[2])
+	a.settings.Models[0].APIKey = " sk-deepseek-model "
+	var used []web
+	a.webSearch = func(ctx context.Context, w web, query string) ([]websearch.Result, error) {
+		used = append(used, w)
+		return goResults["Go 1.27"], nil
+	}
+
+	tt := ui.NewTester(a.view, 1080, 720)
+	a.openSettings()
+	a.settingsTab = 1
+	tt.Frame()
+	click(t, tt, "DeepSeek")
+	if a.settings.SearchService != deepSeek || a.settings.DeepSeekKey != "sk-deepseek-model" || !tt.HasText(locales.DeepSeekHint()) {
+		t.Fatalf("service %q, key %q, texts %q", a.settings.SearchService, a.settings.DeepSeekKey, tt.Texts())
+	}
+	click(t, tt, "测试搜索")
+	snapshot(t, tt, "search-deepseek")
+	if !tt.HasText("可以搜索，找到 2 个网页") || fmt.Sprint(used) != fmt.Sprint([]web{{deepSeek, "sk-deepseek-model", ""}}) {
+		t.Errorf("searched with %+v, texts %q", used, tt.Texts())
+	}
+	if s, err := a.searchService().open(); err != nil || fmt.Sprintf("%T", s) != "websearch.DeepSeek" {
+		t.Errorf("service %T, error %v", s, err)
+	}
+
+	a.settings.DeepSeekKey = "sk-deepseek-own"
+	click(t, tt, "TinyFish（免费）")
+	click(t, tt, "DeepSeek")
+	if a.settings.DeepSeekKey != "sk-deepseek-own" {
+		t.Errorf("key %q", a.settings.DeepSeekKey)
+	}
+	if b := a.backupService(); b.key != "" {
+		t.Errorf("backup %+v", b)
+	}
+	a.settings.TinyFishKey = "sk-tinyfish-test"
+	if b := a.backupService(); b != (web{tinyFish, "sk-tinyfish-test", ""}) {
+		t.Errorf("backup %+v", b)
+	}
+	a.saveSettings()
+	if st := a.store.loadSettings(); st.SearchService != deepSeek || st.DeepSeekKey != "sk-deepseek-own" {
+		t.Errorf("saved settings %+v", st)
+	}
+
+	a.settings.DeepSeekKey, a.settings.WebSearch = "", false
+	a.setSearch(true)
+	if a.settings.WebSearch || a.toast != "先在设置里填写 DeepSeek API Key，才能联网搜索" {
+		t.Errorf("search on %v, toast %q", a.settings.WebSearch, a.toast)
+	}
+
+	b, _ := testApp(t)
+	b.openSettings()
+	b.settingsTab = 1
+	tb := ui.NewTester(b.view, 1080, 720)
+	click(t, tb, "DeepSeek")
+	if b.settings.SearchService != deepSeek || b.settings.DeepSeekKey != "" || !tb.HasText(locales.DeepSeekHint()) {
+		t.Errorf("service %q, key %q", b.settings.SearchService, b.settings.DeepSeekKey)
+	}
+}
+
 func TestReadOnlyKnownPages(t *testing.T) {
 	a, _, _ := searchingApp(t)
 	a.settings.TinyFishKey, a.settings.WebSearch = "sk-tinyfish-test", true

@@ -490,6 +490,8 @@
   "tinyFishHint": "在 agent.tinyfish.ai 注册即可免费获得 API Key，搜索和读网页都不收费：每小时可搜 500 次，每天可读 1000 个网页。搜索词和要读的网址会发给 TinyFish，也走网络代理",
   "tavilyKeyPlaceholder": "Tavily API Key，以 tvly- 开头",
   "tavilyHint": "在 tavily.com 注册即可免费获得 API Key，每月 1000 次额度：搜一次用 1 次，每读 5 个网页用 1 次。搜索词和要读的网址会发给 Tavily，也走网络代理",
+  "deepSeekKeyPlaceholder": "DeepSeek API Key，以 sk- 开头",
+  "deepSeekHint": "用 DeepSeek 开放平台（platform.deepseek.com）的 API Key，和 DeepSeek 模型用的是同一个。搜索和读网页按成功次数从余额里扣，每 1000 次 0.75 美元，没搜到、没读到不收费。搜索词和要读的网址会发给 DeepSeek，也走网络代理",
   "webSearchTest": "测试搜索",
   "webSearchTesting": "正在搜索…",
   "webSearchTestSucceeded": "可以搜索，找到 {count} 个网页",
@@ -695,6 +697,14 @@
       }
     }
   },
+  "webNoBalance": "{service} 账户余额不足，充值后再试",
+  "@webNoBalance": {
+    "placeholders": {
+      "service": {
+        "type": "String"
+      }
+    }
+  },
   "webDailyQuota": "今天的 {service} 免费次数已用完，每天 UTC 0 点恢复",
   "@webDailyQuota": {
     "placeholders": {
@@ -769,6 +779,15 @@
       }
     }
   },
+  "readRefused": "{service} 的安全策略不允许读这个网页",
+  "@readRefused": {
+    "placeholders": {
+      "service": {
+        "type": "String"
+      }
+    }
+  },
+  "readUnavailable": "网页打不开，或上面没有可读的文字",
   "extractOldWord": "旧版 Word 文档请另存为 .docx 后再添加",
   "extractWPSWriter": "WPS 文档请另存为 .docx 后再添加",
   "extractOldExcel": "旧版 Excel 表格请另存为 .xlsx 后再添加",

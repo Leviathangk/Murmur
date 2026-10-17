@@ -1915,6 +1915,26 @@ func (msgs Messages) TavilyHint() string {
 	return Catalog.Format(msgs.locale, "tavilyHint", nil)
 }
 
+// DeepSeekKeyPlaceholder says "DeepSeek API Key，以 sk- 开头"
+// in the language the app shows.
+func DeepSeekKeyPlaceholder() string { return In(i18n.Locale()).DeepSeekKeyPlaceholder() }
+
+// DeepSeekKeyPlaceholder says "DeepSeek API Key，以 sk- 开头"
+// in the language of msgs.
+func (msgs Messages) DeepSeekKeyPlaceholder() string {
+	return Catalog.Format(msgs.locale, "deepSeekKeyPlaceholder", nil)
+}
+
+// DeepSeekHint says "用 DeepSeek 开放平台（platform.deepseek.com）的 API Key，和 DeepSeek …"
+// in the language the app shows.
+func DeepSeekHint() string { return In(i18n.Locale()).DeepSeekHint() }
+
+// DeepSeekHint says "用 DeepSeek 开放平台（platform.deepseek.com）的 API Key，和 DeepSeek …"
+// in the language of msgs.
+func (msgs Messages) DeepSeekHint() string {
+	return Catalog.Format(msgs.locale, "deepSeekHint", nil)
+}
+
 // WebSearchTest says "测试搜索"
 // in the language the app shows.
 func WebSearchTest() string { return In(i18n.Locale()).WebSearchTest() }
@@ -2475,6 +2495,16 @@ func (msgs Messages) WebQuota(service string) string {
 	return Catalog.Format(msgs.locale, "webQuota", map[string]any{"service": service})
 }
 
+// WebNoBalance says "{service} 账户余额不足，充值后再试"
+// in the language the app shows.
+func WebNoBalance(service string) string { return In(i18n.Locale()).WebNoBalance(service) }
+
+// WebNoBalance says "{service} 账户余额不足，充值后再试"
+// in the language of msgs.
+func (msgs Messages) WebNoBalance(service string) string {
+	return Catalog.Format(msgs.locale, "webNoBalance", map[string]any{"service": service})
+}
+
 // WebDailyQuota says "今天的 {service} 免费次数已用完，每天 UTC 0 点恢复"
 // in the language the app shows.
 func WebDailyQuota(service string) string { return In(i18n.Locale()).WebDailyQuota(service) }
@@ -2637,6 +2667,26 @@ func ReadFailed(error string) string { return In(i18n.Locale()).ReadFailed(error
 // in the language of msgs.
 func (msgs Messages) ReadFailed(error string) string {
 	return Catalog.Format(msgs.locale, "readFailed", map[string]any{"error": error})
+}
+
+// ReadRefused says "{service} 的安全策略不允许读这个网页"
+// in the language the app shows.
+func ReadRefused(service string) string { return In(i18n.Locale()).ReadRefused(service) }
+
+// ReadRefused says "{service} 的安全策略不允许读这个网页"
+// in the language of msgs.
+func (msgs Messages) ReadRefused(service string) string {
+	return Catalog.Format(msgs.locale, "readRefused", map[string]any{"service": service})
+}
+
+// ReadUnavailable says "网页打不开，或上面没有可读的文字"
+// in the language the app shows.
+func ReadUnavailable() string { return In(i18n.Locale()).ReadUnavailable() }
+
+// ReadUnavailable says "网页打不开，或上面没有可读的文字"
+// in the language of msgs.
+func (msgs Messages) ReadUnavailable() string {
+	return Catalog.Format(msgs.locale, "readUnavailable", nil)
 }
 
 // ExtractOldWord says "旧版 Word 文档请另存为 .docx 后再添加"

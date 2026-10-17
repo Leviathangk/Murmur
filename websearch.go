@@ -29,13 +29,17 @@ const (
 const (
 	tinyFish = "tinyfish"
 	tavily   = "tavily"
+	deepSeek = "deepseek"
 )
 
-var searchServices = []string{tinyFish, tavily}
+var searchServices = []string{tinyFish, tavily, deepSeek}
 
 func serviceName(service string) string {
-	if service == tavily {
+	switch service {
+	case tavily:
 		return "Tavily"
+	case deepSeek:
+		return "DeepSeek"
 	}
 	return "TinyFish"
 }
@@ -78,8 +82,11 @@ func (w web) open() (websearch.Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	if w.service == tavily {
+	switch w.service {
+	case tavily:
 		return websearch.Tavily{Key: w.key, Client: client}, nil
+	case deepSeek:
+		return websearch.DeepSeek{Key: w.key, Client: client}, nil
 	}
 	return websearch.TinyFish{Key: w.key, Client: client}, nil
 }
@@ -101,10 +108,30 @@ func fetchPage(ctx context.Context, w web, link string) (*websearch.Page, error)
 }
 
 func (s *Settings) searchKey() *string {
-	if s.SearchService == tavily {
+	switch s.SearchService {
+	case tavily:
 		return &s.TavilyKey
+	case deepSeek:
+		return &s.DeepSeekKey
 	}
 	return &s.TinyFishKey
+}
+
+func (s *Settings) deepSeekModelKey() string {
+	for _, m := range s.Models {
+		u, err := url.Parse(strings.TrimSpace(m.BaseURL))
+		if err == nil && strings.EqualFold(u.Hostname(), "api.deepseek.com") && strings.TrimSpace(m.APIKey) != "" {
+			return strings.TrimSpace(m.APIKey)
+		}
+	}
+	return ""
+}
+
+func (s *Settings) chooseSearch(service string) {
+	s.SearchService = service
+	if service == deepSeek && strings.TrimSpace(s.DeepSeekKey) == "" {
+		s.DeepSeekKey = s.deepSeekModelKey()
+	}
 }
 
 func (a *app) searchService() web {
@@ -112,7 +139,7 @@ func (a *app) searchService() web {
 }
 
 func (a *app) backupService() web {
-	if a.settings.SearchService != tavily {
+	if a.settings.SearchService == tinyFish {
 		return web{}
 	}
 	return web{service: tinyFish, key: strings.TrimSpace(a.settings.TinyFishKey), proxy: a.settings.Proxy}
@@ -656,8 +683,11 @@ func (a *app) testSearch() {
 }
 
 func (a *app) searchHint() string {
-	if a.settings.SearchService == tavily {
+	switch a.settings.SearchService {
+	case tavily:
 		return locales.TavilyHint()
+	case deepSeek:
+		return locales.DeepSeekHint()
 	}
 	return locales.TinyFishHint()
 }
@@ -666,11 +696,14 @@ func (a *app) searchSettings(c *ui.Context) {
 	t := c.Theme()
 	ui.Column(c).Gap(10).Children(func() {
 		i := max(slices.Index(searchServices, a.settings.SearchService), 0)
-		ui.Segmented(c.Key("search-service"), &i, locales.TinyFishOption(), "Tavily").Label(locales.WebSearchService()).AlignSelf(ui.Start).
-			OnChange(func() { a.settings.SearchService = searchServices[i] })
+		ui.Segmented(c.Key("search-service"), &i, locales.TinyFishOption(), "Tavily", "DeepSeek").Label(locales.WebSearchService()).AlignSelf(ui.Start).
+			OnChange(func() { a.settings.chooseSearch(searchServices[i]) })
 		placeholder := locales.TinyFishKeyPlaceholder()
-		if a.settings.SearchService == tavily {
+		switch a.settings.SearchService {
+		case tavily:
 			placeholder = locales.TavilyKeyPlaceholder()
+		case deepSeek:
+			placeholder = locales.DeepSeekKeyPlaceholder()
 		}
 		ui.TextInput(c.Key(a.settings.SearchService+"-key"), a.settings.searchKey()).Password().Placeholder(placeholder)
 		w := a.searchService()

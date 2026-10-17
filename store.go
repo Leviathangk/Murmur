@@ -74,6 +74,7 @@ type Settings struct {
 	SearchService string `json:"search_service,omitempty"`
 	TavilyKey     string `json:"tavily_api_key,omitempty"`
 	TinyFishKey   string `json:"tinyfish_api_key,omitempty"`
+	DeepSeekKey   string `json:"deepseek_api_key,omitempty"`
 }
 
 // model returns the model of the given ID, or nil.
