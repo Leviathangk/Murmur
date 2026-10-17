@@ -36,6 +36,7 @@ func (a *app) view(c *ui.Context) {
 		a.searchInput.Focus(c)
 	}
 	a.exportToast(c)
+	a.closeStaleSources()
 
 	vibrant := c.Vibrancy()
 	if vibrant {
@@ -44,6 +45,11 @@ func (a *app) view(c *ui.Context) {
 	bar := c.TitleBar()
 	row := ui.Row(c).Fill().AlignItems(ui.Stretch)
 	shown := row.Animate("sidebar", b2f(!a.collapsed), 220*time.Millisecond)
+	panel := row.Animate("sources", b2f(a.sourcesOpen), 220*time.Millisecond)
+	docked, floating := panel, float32(0)
+	if !a.sourcesDocked(c) {
+		docked, floating = 0, panel
+	}
 	row.Children(func() {
 		// The sidebar slides out to the left as it hides.
 		w := sidebarWidth * shown
@@ -59,8 +65,19 @@ func (a *app) view(c *ui.Context) {
 		}
 		// With the sidebar hidden, the title makes room for the buttons
 		// beside the window controls.
-		a.pane(c, (1-shown)*(bar.Left+76))
+		a.pane(c, (1-shown)*(bar.Left+76), (1-docked)*bar.Right)
+		if w := sourcesWidth * docked; w > 0.5 {
+			ui.Box(c).Width(1).Background(t.Border)
+			ui.Row(c.Key("sources")).Width(w).Shrink(0).AlignItems(ui.Stretch).Clip().Children(func() {
+				ui.Column(c).Width(sourcesWidth).Shrink(0).Background(t.Background).Children(func() { a.sourcesPanel(c, bar.Right) })
+			})
+		}
 	})
+	if floating > 0.001 {
+		ui.Column(c.Key("sources-floating")).Absolute().Top(0).Bottom(0).Right(-(1-floating)*(sourcesWidth+24)).Width(sourcesWidth).
+			Background(t.Background).BorderWidth(0, 0, 0, 1).BorderColor(t.Border).Shadow(0, 0, 24, 0, ui.RGBA(0, 0, 0, 0.18)).
+			Children(func() { a.sourcesPanel(c, bar.Right) })
+	}
 
 	// Beside the window controls, whether the sidebar shows or not.
 	ui.Row(c.Key("tools")).Absolute().Left(bar.Left + 8).Top((titleBarHeight - 30) / 2).Gap(2).Children(func() {
@@ -299,11 +316,10 @@ func groupChats(chats []*Chat, now time.Time) []chatGroup {
 }
 
 // pane is the chat shown, under a title bar whose title starts titleLeft
-// further right. Images and documents dropped on it are attached to the
-// message being written.
-func (a *app) pane(c *ui.Context, titleLeft float32) {
+// further right and ends titleRight before the end. Images and documents
+// dropped on it are attached to the message being written.
+func (a *app) pane(c *ui.Context, titleLeft, titleRight float32) {
 	t := c.Theme()
-	bar := c.TitleBar()
 	col := ui.Column(c).Grow(1).MinWidth(0).Background(t.Background)
 	if files := col.DroppedFiles(); files != nil {
 		a.attachFiles(files)
@@ -311,7 +327,7 @@ func (a *app) pane(c *ui.Context, titleLeft float32) {
 	dragOver := col.FileDragOver()
 	col.Children(func() {
 		deleted := ""
-		ui.Row(c).Height(titleBarHeight).Shrink(0).AlignItems(ui.Center).Gap(8).Padding(0, bar.Right+12, 0, 20+titleLeft).DragWindow().Children(func() {
+		ui.Row(c).Height(titleBarHeight).Shrink(0).AlignItems(ui.Center).Gap(8).Padding(0, titleRight+12, 0, 20+titleLeft).DragWindow().Children(func() {
 			title := locales.NewChat()
 			if a.current != nil && a.current.Title != "" {
 				title = a.current.Title
@@ -435,6 +451,9 @@ func (a *app) message(c *ui.Context, ch *Chat, i int) {
 				})
 			}
 			if !m.streaming {
+				if len(m.Sources) > 0 {
+					a.sourcesChip(c, m)
+				}
 				a.actions(c, ch, i)
 			}
 		})
@@ -650,6 +669,9 @@ func (a *app) composer(c *ui.Context, dragOver bool) {
 				w, _ := c.Size()
 				if !a.collapsed {
 					w -= sidebarWidth
+				}
+				if a.sourcesOpen && a.sourcesDocked(c) {
+					w -= sourcesWidth
 				}
 				a.thinkPicker(c, w < 640)
 				a.searchToggle(c, w < 640)

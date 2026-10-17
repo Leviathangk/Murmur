@@ -48,6 +48,9 @@ type app struct {
 	md        markdown.Options
 	formulas  formulaCache
 
+	sourcesFor  *Message
+	sourcesOpen bool
+
 	search      string    // what is searched for in the sidebar
 	searchInput ui.Handle // the field it is typed in
 	searched    string    // the search of found

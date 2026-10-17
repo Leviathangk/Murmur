@@ -559,6 +559,26 @@ func (msgs Messages) SearchFailed(error string) string {
 	return Catalog.Format(msgs.locale, "searchFailed", map[string]any{"error": error})
 }
 
+// SourcesCount says "{pages} 个网页"
+// in the language the app shows.
+func SourcesCount(pages int) string { return In(i18n.Locale()).SourcesCount(pages) }
+
+// SourcesCount says "{pages} 个网页"
+// in the language of msgs.
+func (msgs Messages) SourcesCount(pages int) string {
+	return Catalog.Format(msgs.locale, "sourcesCount", map[string]any{"pages": pages})
+}
+
+// SourcesTitle says "搜索结果"
+// in the language the app shows.
+func SourcesTitle() string { return In(i18n.Locale()).SourcesTitle() }
+
+// SourcesTitle says "搜索结果"
+// in the language of msgs.
+func (msgs Messages) SourcesTitle() string {
+	return Catalog.Format(msgs.locale, "sourcesTitle", nil)
+}
+
 // DurationSeconds says "{seconds} 秒"
 // in the language the app shows.
 func DurationSeconds(seconds int) string { return In(i18n.Locale()).DurationSeconds(seconds) }

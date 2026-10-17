@@ -24,6 +24,7 @@ const (
 	maxQueryRunes = 400
 	maxReads      = 5
 	maxPageRunes  = 10000
+	maxSnippet    = 200
 )
 
 const (
@@ -64,6 +65,11 @@ type Source struct {
 	Title     string `json:"title"`
 	URL       string `json:"url"`
 	Published string `json:"published,omitempty"`
+	Snippet   string `json:"snippet,omitempty"`
+}
+
+func excerpt(s string) string {
+	return clipRunes(strings.Join(strings.Fields(s), " "), maxSnippet)
 }
 
 func (s *Source) title() string {
@@ -308,7 +314,7 @@ func (s *searcher) run(ctx context.Context, input json.RawMessage) (string, erro
 		s.allow(r.URL)
 		n, ok := s.number(r.URL)
 		if ok {
-			added = append(added, &Source{Title: r.Title, URL: r.URL, Published: r.Published})
+			added = append(added, &Source{Title: r.Title, URL: r.URL, Published: r.Published, Snippet: excerpt(r.Content)})
 		}
 		numbers[i] = n
 	}

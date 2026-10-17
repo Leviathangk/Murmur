@@ -52,6 +52,8 @@
   "searchNoResults": "No results",
   "searchAllFailed": "Web search failed",
   "searchFailed": "Search failed: {error}",
+  "sourcesCount": "{pages, plural, one {# page} other {# pages}}",
+  "sourcesTitle": "Search results",
   "durationSeconds": "{seconds}s",
   "durationMinutes": "{minutes}m {seconds}s",
   "usageInput": "{count} input",

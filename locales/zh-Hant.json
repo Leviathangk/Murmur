@@ -52,6 +52,8 @@
   "searchNoResults": "沒有結果",
   "searchAllFailed": "聯網搜尋失敗",
   "searchFailed": "搜尋失敗：{error}",
+  "sourcesCount": "{pages} 個網頁",
+  "sourcesTitle": "搜尋結果",
   "durationSeconds": "{seconds} 秒",
   "durationMinutes": "{minutes} 分 {seconds} 秒",
   "usageInput": "輸入 {count}",

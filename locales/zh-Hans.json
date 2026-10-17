@@ -142,6 +142,15 @@
       }
     }
   },
+  "sourcesCount": "{pages} 个网页",
+  "@sourcesCount": {
+    "placeholders": {
+      "pages": {
+        "type": "int"
+      }
+    }
+  },
+  "sourcesTitle": "搜索结果",
   "durationSeconds": "{seconds} 秒",
   "@durationSeconds": {
     "placeholders": {
