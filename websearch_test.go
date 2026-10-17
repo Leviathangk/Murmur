@@ -132,6 +132,8 @@ func TestWebSearch(t *testing.T) {
 		t.Fatalf("texts %q", tt.Texts())
 	}
 	click(t, tt, "已搜索「Go 1.27」· 2 个网页")
+	time.Sleep(400 * time.Millisecond)
+	tt.Frame()
 	click(t, tt, "已搜索「Go release」· 2 个网页")
 	for _, s := range []string{"[2]", "Go 1.27 Release Notes", "[3]", "Release History", "go.dev · 2026-08-12", "go.dev · 2026-09-03", "go.dev"} {
 		if !tt.HasText(s) {
