@@ -355,7 +355,7 @@ func (a *app) pane(c *ui.Context, titleLeft, titleRight float32) {
 func (a *app) welcome(c *ui.Context) {
 	t := c.Theme()
 	ui.Column(c).Grow(1).Center().Gap(14).Padding(24).Children(func() {
-		ui.Icon(c, logoIcon).Size(40, 40).TextColor(t.Accent)
+		ui.Image(c, logo).Size(64, 64)
 		ui.Text(c, locales.WelcomeTitle()).FontSize(24).Bold()
 		if a.model() == nil {
 			ui.Text(c, locales.WelcomeAddModel()).

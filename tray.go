@@ -14,8 +14,8 @@ import (
 // the window hides it, and an icon in the menu bar (macOS) or the
 // notification area (Windows) opens it again or quits.
 
-// trayMacOS is the logo's bars, black on transparent, for macOS to tint like
-// the rest of the menu bar.
+// trayMacOS is the logo's speech bubble, black on transparent, for macOS to
+// tint like the rest of the menu bar.
 //
 //go:embed resources/tray-macos.png
 var trayMacOS []byte
